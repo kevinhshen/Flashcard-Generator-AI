@@ -1,5 +1,7 @@
 import os
 import time
+import csv
+
 print("PID:", os.getpid())
 
 print("Hello World")
@@ -12,7 +14,7 @@ print("Carbon - 4 valence electrons")
 print("")
 
 inputList=[]
-
+seperaterList = ("-","|",":",";",",","  ","_")
 numCard=1
 while True:
     
@@ -25,10 +27,29 @@ while True:
         print("")
         continue
     
-    front, back = value.split("-", 1)
-
-    front = front.strip()
-    back = back.strip()
+    bestSeperater="" 
+    topScore=0
+    for seperater in seperaterList:
+        score=0
+        line = value.split(seperater)
+        
+        if len(line)==2:
+            score+=2;
+        
+        if len(line)!=2:
+            score-=1;
+            
+        front = line[0].strip()
+        back = line[1].strip()
+        
+        if not front or not back:
+            score-=2;
+            
+        if score>topScore:
+            topScore=score
+            bestSeperater=seperater
+        
+    front, back = value.split(bestSeperater,1)
 
     if front == "" or back == "":
         print("Invalid format. Missing front or back.")
@@ -38,18 +59,18 @@ while True:
     inputList.append((front, back))
     numCard+=1
     
-fileName = f"ankiImport_{int(time.time())}.txt"
+fileName = f"ankiImport_{int(time.time())}.csv"
 
-with open(fileName,"w") as file:
+with open(fileName,"w", newline="") as file:
+    writer = csv.writer(file)
     for front, back in inputList:
-        file.write(f"{front}    {back}\n");
+        writer.writerow([front, back])
         
 print("Saved to: "+fileName)
 print("File Created, seperater by tab")
 
         
-    
-    
+
     
 
 
