@@ -2,20 +2,24 @@ import os
 import time
 import csv
 
-print("PID:", os.getpid())
-
-print("Hello World")
-print("Please input your notes line by line in the format (front - back)")
-print("Type 'stop' to finish")
-print("")
-print("Example: ")
-print("Velocity - speed with direction")
-print("Carbon - 4 valence electrons")
-print("")
-
 inputList=[]
 seperaterList = ("-","|",":",";",",","  ","_")
 numCard=1
+
+def introText():
+    print("PID:", os.getpid())
+    print("Hello World")
+    print("Please input your notes line by line in the format (front - back)")
+    print("Type 'stop' to finish")
+    print("")
+    print("Example: ")
+    print("Velocity - speed with direction")
+    print("Carbon - 4 valence electrons")
+    print("")
+    
+introText()
+
+
 while True:
     
     value = input("Card #"+str(numCard)+": ");
@@ -71,7 +75,6 @@ print("File Created, seperater by tab")
 
         
 
-    
 
 
 
