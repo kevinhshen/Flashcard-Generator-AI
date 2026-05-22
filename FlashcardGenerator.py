@@ -2,63 +2,79 @@ import os
 import time
 import csv
 
-inputList=[]
-seperaterList = ("-","|",":",";",",","  ","_")
-numCard=1
-
-def introText():
-    print("PID:", os.getpid())
-    print("Hello World")
-    print("Please input your notes line by line in the format (front - back)")
-    print("Type 'stop' to finish")
-    print("")
-    print("Example: ")
-    print("Velocity - speed with direction")
-    print("Carbon - 4 valence electrons")
-    print("")
+class FlashCardApp():
+    def __init__(self):
+        self.inputList=[]
+        self.seperaterList = ("-","|",":",";",",","  ","_")
+        
+        self.introText()
+        
+        
+    def introText(self):
+        print("PID:", os.getpid())
+        print("Hello World")
+        print("Please input your notes line by line in the format (front - back)")
+        print("Type 'end' to finish")
+        print("")
+        print("Example: ")
+        print("Velocity - speed with direction")
+        print("Carbon - 4 valence electrons")
+        print("")
     
-introText()
 
+
+
+
+introText()
+def userInput():
+    rawText = input("Please paste your notes here: ")
+    
+        
+        
+def score_seperater(lines, sep):
+    score=0
+    valid_lines=0
+    
+    
 
 while True:
     
     value = input("Card #"+str(numCard)+": ");
-    if(value.lower() == "stop"):
+    if(value.lower() == "end"):
         break
     
-    if "-" not in value:
-        print("Invalid format. Use: front - back")
-        print("")
-        continue
     
     bestSeperater="" 
     topScore=0
     for seperater in seperaterList:
         score=0
         line = value.split(seperater)
-        
-        if len(line)==2:
-            score+=2;
-        
-        if len(line)!=2:
-            score-=1;
+        if len(line) <2:
+            print("Card invalid")
+            continue
+        if len(line) == 2:
+            score += 2
+        else:
+            score -= 2
+
+        if line[0]=="" or line[1]=="":
+            score -= 3
             
         front = line[0].strip()
-        back = line[1].strip()
+        back = line[1].strip()    
         
-        if not front or not back:
-            score-=2;
+        
+        
             
         if score>topScore:
             topScore=score
             bestSeperater=seperater
-        
-    front, back = value.split(bestSeperater,1)
-
-    if front == "" or back == "":
-        print("Invalid format. Missing front or back.")
-        print("")
+    
+    if bestSeperater=="":
+        print("Card invalid")
         continue
+    
+    front, back = value.split(bestSeperater,1)
 
     inputList.append((front, back))
     numCard+=1
