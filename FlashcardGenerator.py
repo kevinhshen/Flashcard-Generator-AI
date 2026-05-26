@@ -4,10 +4,13 @@ import csv
 
 class FlashCardApp():
     def __init__(self):
-        self.inputList=[]
-        self.seperaterList = ("-","|",":",";",",","  ","_")
+        self.rawLines=[]
+        self.seperaterList = ("-","|",":",";",",","  ","_","\n")
         
         self.introText()
+        self.userInput()
+        self.convertLinesToBlocks()
+        print(self.blocks)
         
         
     def introText(self):
@@ -20,74 +23,94 @@ class FlashCardApp():
         print("Velocity - speed with direction")
         print("Carbon - 4 valence electrons")
         print("")
-    
-
-
-
-
-introText()
-def userInput():
-    rawText = input("Please paste your notes here: ")
-    
         
+    def userInput(self):
+        print("Please paste your notes here:")
+        print("Type 'END' to finish input.")
+        while True:
+            line = input()
+            if line=="END":
+                break
+            self.rawLines.append(line)
+    
+    def convertLinesToBlocks(self):
+        #This function aims to detect the empty line in the notes
+        #and use it as seperaters for different flashcards, turing them into blocks
+        self.blocks=[]
+        current=[]
         
-def score_seperater(lines, sep):
-    score=0
-    valid_lines=0
-    
+        for line in self.rawLines:
+            line=line.strip()
+            if(line ==""):
+                if current:
+                    self.blocks.append(current)
+                    current=[]
+                             
+            else:
+                current.append(line)
+                
+
+        if current:
+            self.blocks.append(current)
+
+
+if __name__ =="__main__":
+    app=FlashCardApp()
     
 
-while True:
     
-    value = input("Card #"+str(numCard)+": ");
-    if(value.lower() == "end"):
-        break
-    
-    
-    bestSeperater="" 
-    topScore=0
-    for seperater in seperaterList:
-        score=0
-        line = value.split(seperater)
-        if len(line) <2:
-            print("Card invalid")
-            continue
-        if len(line) == 2:
-            score += 2
-        else:
-            score -= 2
 
-        if line[0]=="" or line[1]=="":
-            score -= 3
+# while True:
+    
+#     value = input("Card #"+str(numCard)+": ");
+#     if(value.lower() == "end"):
+#         break
+    
+    
+#     bestSeperater="" 
+#     topScore=0
+#     for seperater in seperaterList:
+#         score=0
+#         line = value.split(seperater)
+#         if len(line) <2:
+#             print("Card invalid")
+#             continue
+#         if len(line) == 2:
+#             score += 2
+#         else:
+#             score -= 2
+
+#         if line[0]=="" or line[1]=="":
+#             score -= 3
             
-        front = line[0].strip()
-        back = line[1].strip()    
+#         front = line[0].strip()
+#         back = line[1].strip()    
         
         
         
             
-        if score>topScore:
-            topScore=score
-            bestSeperater=seperater
+#         if score>topScore:
+#             topScore=score
+#             bestSeperater=seperater
     
-    if bestSeperater=="":
-        print("Card invalid")
-        continue
+#     if bestSeperater=="":
+#         print("Card invalid")
+#         continue
     
-    front, back = value.split(bestSeperater,1)
+#     front, back = value.split(bestSeperater,1)
 
-    inputList.append((front, back))
-    numCard+=1
+#     inputList.append((front, back))
+#     numCard+=1
     
-fileName = f"ankiImport_{int(time.time())}.csv"
+# fileName = f"ankiImport_{int(time.time())}.csv"
 
-with open(fileName,"w", newline="") as file:
-    writer = csv.writer(file)
-    for front, back in inputList:
-        writer.writerow([front, back])
+# with open(fileName,"w", newline="") as file:
+#     writer = csv.writer(file)
+#     for front, back in inputList:
+#         writer.writerow([front, back])
         
-print("Saved to: "+fileName)
-print("File Created, seperater by tab")
+# print("Saved to: "+fileName)
+# print("File Created, seperater by tab")
 
         
 
