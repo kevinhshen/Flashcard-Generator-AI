@@ -1,16 +1,20 @@
 import os
+import re
+import nltk
 import time
 import csv
 
 class FlashCardApp():
     def __init__(self):
         self.rawLines=[]
+        self.blocks=[]
         self.seperaterList = ("-","|",":",";",",","  ","_","\n")
         
         self.introText()
         self.userInput()
-        self.convertLinesToBlocks()
-        print(self.blocks)
+        self.tokeniseData()
+        self.displayList(blocks)
+    
         
         
     def introText(self):
@@ -33,25 +37,33 @@ class FlashCardApp():
                 break
             self.rawLines.append(line)
     
-    def convertLinesToBlocks(self):
-        #This function aims to detect the empty line in the notes
-        #and use it as seperaters for different flashcards, turing them into blocks
-        self.blocks=[]
-        current=[]
-        
+    def tokeniseData(self):
+        #This function aims to tokenise the user input into blocks of text
         for line in self.rawLines:
-            line=line.strip()
-            if(line ==""):
-                if current:
-                    self.blocks.append(current)
-                    current=[]
-                             
-            else:
-                current.append(line)
-                
+            for seperater in self.seperaterList:
+                self.blocks.append(line.split(seperater))
+            
+    def displayList(self, arr):
+        for item in arr:
+            print(item)
+            
+    def clean_text(text: str) -> str:
+        #Converts newline formats with different OS into standard \n
+        text = text.replace('\r\n', '\n').replace('\r', '\n') 
 
-        if current:
-            self.blocks.append(current)
+        #Collapse multiple empty space into one
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Fix spaces around punctuation
+        text = re.sub(r'\s+([?.!,])', r'\1', text)
+        
+        # Collapse multiple spaces
+        text = re.sub(r'[^\S\n]+', ' ', text)
+        
+        return text.strip()
+        
+            
+
 
 
 if __name__ =="__main__":
