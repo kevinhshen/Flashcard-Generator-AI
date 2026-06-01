@@ -1,0 +1,63 @@
+The Accounting model:
+Financial statement:
+The main objective of the financial statements is to provide information about the
+business’s resources, claims to its resources, and its ability to earn a profit and generate cash to allow investors and creditors (external users) to make decisions about a business.
+Balance Sheet:
+In accounting, economic resources that are owned or controlled by a business are called “assets.” Claims on the economic resources are the amounts owed by the business and the owner’s rights to the resources. In accounting, amounts owed
+The business is called “liabilities” and the owner’s right to these resources is called “owner’s equity.” Assets, liabilities, and owner’s equity are reported in the balance sheet.
+Assets:
+Assets are the resources owned or controlled by a business that are expected to provide future services or economic benefits. In a company, that future service potential or economic benefit eventually results in cash inflows (receipts).
+
+Liabilities:
+Liabilities are current obligations, arising from past events, to make a future payment of assets or services. That is, liabilities are present debts and obligations.
+
+Sometimes customers might pay a business in advance of being provided a service or product. This advance by the customer is a liability, unearned revenue, as the business has an obligation to provide the service or product in the future.
+
+Owner's Equity:
+The owners claim (residual equity) on the assets of the company is known as owner’s equity. It is equal to total assets minus total liabilities.
+If the equity is negative—that is, if total liabilities are more than total assets—the term “owner’s deficiency” (or deficit) describes the shortage.
+
+The Accounting Equation:
+The relationship between assets, liabilities, and owner’s equity is expressed as an equation, called the accounting equation. Assets must equal the sum of liabilities and owner’s equity. 
+
+Liabilities are shown before owner’s equity in the accounting equation because creditors’ claims are paid before ownership claims if a business is liquidated.
+
+
+Income Statement:
+The main purpose of the income statement is to report the profitability of the business’s operations over a specified period of time (a month, quarter, or year). Profit is measured by the difference between revenues and expenses.
+
+Revenues:
+Results from business activities to earn profit, such as performing services
+Revenues result in an increase in an asset (or a decrease in a liability when a customer has paid in advance) and an increase in owner’s equity.
+
+Expenses:
+Expenses are the costs of assets that are consumed and services that are used in a company’s business activities. Expenses are decreases in assets or increases in liabilities, excluding withdrawals made by the owners, and result in a decrease to owner’s equity
+
+
+Statement of Owner’s Equity:
+The statement of owner’s equity shows the changes in owner’s equity for the same period of time as the
+income statement. In a proprietorship, owner’s equity is increased by investments made by the owner and
+decreased by withdrawals made by the owner.
+Investments:
+Investments by the owner are contributions of cash or other assets (such as a vehicle or computer) made by the owners from their personal resources to the business. In a proprietorship, investments are recorded as increases to what is known as the owner’s capital account. Accordingly, investments by owners result in an increase in an asset and an increase in owner’s equity.
+
+Drawings:
+An owner may withdraw cash (or other assets) for personal use. In a proprietorship, these withdrawals
+could be recorded as a direct decrease to the owner’s capital account.
+
+Profit:
+Profit results from revenues being greater than expenses and a loss results if expenses are greater than revenues. Therefore, profit increases owner’s equity and losses decrease owner’s equity.
+
+
+Cash Flow Statement:
+The cash flow statement gives information about the cash receipts and cash payments for a specific period of time. The cash flow statement gives answers to the following simple but important questions:
+1. Where did the cash come from during the period?
+2. What was the cash used for during the period?
+3. What was the change in the cash balance during the period?
+
+Accounting Differences by Type of Business Organization:
+
+
+THE EXPANDED ACCOUNTING EQUATION:
+
+

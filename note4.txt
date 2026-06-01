@@ -1,0 +1,21 @@
+Building the financial statements
+RECOGNITION AND MEASUREMENT
+Only events that cause changes in assets, liabilities, or owner’s equity should be recorded. These events are called accounting transactions.
+
+Recognition is the process of recording an asset, liability, revenue, or expense in the accounting records. 
+
+Fundamental to this discussion is that only transactions that can be reliably expressed as an amount of money can be included in the accounting records. This has been known as the monetary unit assumption. This assumption makes it possible for accounting to quantify (measure) economic events.
+
+
+Transaction analysis:
+Once it has been determined that an event or transaction should be recognized, it must be analyzed for effect on the components of the accounting equation before it can be recorded.
+
+Preparing financial statements:
+Income statement
+Statement of owner’s equity
+Balance sheet
+Cash flow statement
+
+
+
+
