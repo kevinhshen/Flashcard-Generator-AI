@@ -1,0 +1,20 @@
+Accounting Standards
+The accounting profession has developed a set of standards that are generally accepted and universally practised. This common set of standards, called generally accepted accounting principles (GAAP), includes broad principles and practices, as well as rules and procedures. These standards indicate how to report economic events.
+
+In Canada, the Accounting Standards Board (AcSB), an independent standard-setting body created by the Chartered Professional Accountants of Canada (CPA Canada), has the main responsibility for developing GAAP. The AcSB’s most important criterion for accounting standards is this: the standard
+should lead to external users having the most useful/financial information possible when they are making business decisions.
+
+International Financial Reporting Standards and Accounting Standards for Private Enterprises
+Canadian public enterprises must follow International Financial Reporting Standards (IFRS), a set of global standards developed by the InternationalAccounting Standards Board (IASB).
+
+On the other hand, the users of a private company’s financial statements generally have the ability to obtain additional information from the company if required. Because these users typically require less information in the financial statements, the AcSB developed Accounting Standards for Private Enterprises (ASPE). ASPE requires considerably less information in financial statements than is required by IFRS. While public companies have to follow IFRS, Canadian private companies, including private corporations such as McCain Foods and EllisDon Inc., have the choice to report under ASPE or IFRS. As proprietorships and partnerships are private companies, these companies will generally follow ASPE for financial reporting.
+
+Both IFRS and ASPE are considered “principles-based” as opposed to “rules-based” standards.
+
+Economic Entity Concept
+Financial statements are prepared for a business or economic unit This is referred to as the economic entity concept The concept requires that the accounting for an economic entity’s activities be kept separate and distinct from the accounting for the activities of its owner and all other economic entities. An economic entity can be any organization or unit in society.
+
+
+Going Concern Assumption
+The going concern assumption is the assumption that the economic entity will continue to operate in the foreseeable future. Although some businesses fail, most companies continue operating for a long time. The going concern assumption presumes that the company will operate long enough to use its resources for their intended purpose and to complete the company’s commitments.
+If a company is a going concern, then financial statement users will find it useful for the company to report certain resources, such as land, at their cost. Land is acquired so a company can use it, not so it can be resold. Therefore, what matters is the amount the company gave up to acquire the land, not an estimate of its current worth. If a company is not a going concern, and the land is going to be sold, then financial statement users will be more interested in the land’s current value.
