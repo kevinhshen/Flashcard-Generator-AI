@@ -1,4 +1,6 @@
 import os
+
+# import python regex library
 import re
 
 # use natual language tool kit library
@@ -23,12 +25,17 @@ class FlashCardApp():
         self.QUESTION_STARTERS = ('what', 'who', 'where', 'when', 'why', 'how', 
             'which', 'define', 'explain', 'describe', 'list'
         )
+        
         self.DEFINITION_PATTERNS = [
-            r'.+ is (a|an|the) .+',          # "X is a Y"
-            r'.+ refers to .+',               # "X refers to Y"
-            r'.+ is defined as .+',           # "X is defined as Y"
-            r'.+ means .+',                   # "X means Y"
-            r'.+, (which|who) is .+',        # "X, which is Y"
+            # word based definition patterns 
+            r'(.+?) is (?:a|an|the) (.+)',
+            r'(.+?) refers to (.+)',
+            r'(.+?) is defined as (.+)',
+            r'(.+?) means (.+)',
+            r'(.+?), (?:which|who) is (.+)',
+            
+            # symbol based definition patterns
+             r'(.+?)\s*:\s*(.+)',
         ]
 
         
@@ -127,6 +134,62 @@ class FlashCardApp():
         
         return 'fact'
     
+    def sentence_to_flashcard(self, sentence: str) -> dict | None:
+        kind = self.classify_sentence(sentence)
+        
+        if kind == 'question':
+            # Since we don't have enough information to generate a flashcard from a question alone, we handle it at next step
+            return None
+        
+        if kind == 'definition':
+            # regex format:
+            for pattern in self.DEFINITION_PATTERNS:  
+                # 'match' becomes a match object if sentence fit the exact 'pattern'
+                # 'match' object is very useful for language processing
+                # it allows for method  match.group() which automatically breaks up 
+                match = re.match(pattern, sentence, re.IGNORECASE)
+                if match:
+                    return{
+                        'front':f'What is {match.group(1).strip()}?',
+                        'back':match.group(2).strip().rstrip('.')
+                        # rstrip('.') removes the period at the end
+                    }
+                        
+        if kind == 'definition':
+            return self.make_cloze(sentence)
+
+        return None
+    def make_cloze(self,sentence:str) -> dict:
+        words = sentence.split()
+        
+        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'of', 'and', 'or'}
+        candidates = [
+            # enumerate tracks the index and value of items
+            # 'i': the index position
+            # 'w': the word
+            # (i,w) stores in a candidate pair
+            (i, w) for i, w in enumerate(words)
+            # skips words less than 4 in less, avoid unimportant words
+            if len(w) > 4 and w.lower().rstrip('.,') not in stop_words
+        ]
+        
+        # catchs exceptions
+        if not candidates:
+            return {'front': sentence, 'back': '(no blank found)'}    
+        
+        # main areas of replacement for AI
+        # currently only uses the last candidate in list
+        # potentially implement AI to check accuracy
+        idx, word =  candidates[-1]
+        clean_word = word.rstrip('.,;')
+        blanked = words.copy()
+        blanked[idx] = '_______'
+        return {
+            # joins combines list of strings back into 1 string
+            'front': ' '.join(blanked),
+            'back': clean_word
+        }        
+        
     
 if __name__ =="__main__":
     app=FlashCardApp()
