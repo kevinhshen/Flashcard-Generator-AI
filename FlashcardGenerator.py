@@ -3,6 +3,9 @@ import os
 # import python regex library
 import re
 
+# import pretty print library
+from pprint import pprint
+
 # use natual language tool kit library
 import nltk
 # 'punkt' and 'punkt_tab' are tokenizer data files used by sent_tokenize.
@@ -19,8 +22,8 @@ import csv
 class FlashCardApp():
     def __init__(self):
         self.lines=[]
-        self.blocks=[]
         self.tokenised=[]
+        self.flash_cards=[]
         self.seperaterList = ("-","|",":",";",",","  ","_","\n")
         self.QUESTION_STARTERS = ('what', 'who', 'where', 'when', 'why', 'how', 
             'which', 'define', 'explain', 'describe', 'list'
@@ -39,27 +42,15 @@ class FlashCardApp():
         ]
 
         
-        self.introText()
         self.lines=self.user_input_list()
         
         for line in self.lines:
-            line=self.clean_text(line)
-            self.tokenised.extend(self.split_sentences(line))
+            self.flash_cards.extend(self.extract_flashcards(line))
         
-        self.display_list(self.tokenised)
+        self.display_list(self.flash_cards)        
     
         
-        
-    def introText(self):
-        print("PID:", os.getpid())
-        print("Hello World")
-        print("Please input your notes line by line in the format (front - back)")
-        print("Type 'end' to finish")
-        print("")
-        print("Example: ")
-        print("Velocity - speed with direction")
-        print("Carbon - 4 valence electrons")
-        print("")
+    
         
     def user_input_list(self) -> list[str]:
         list=[]        
@@ -75,9 +66,10 @@ class FlashCardApp():
         
             
     def display_list(self, arr):
-        for item in arr:
-            print("-----------------------------------------------")
-            print(item)
+        print("display_list ran")
+        for block in arr:
+            print(block)
+        print("successfully printed")    
             
     def clean_text(self, text: str) -> str:
         #Converts newline formats with different OS into standard \n
@@ -94,6 +86,92 @@ class FlashCardApp():
         
         return text.strip()
     
+    # add before split_sentence
+    # Aims to turn raw text into structured blocks, instead of splitting everything into individual sentences
+    def merge_label_blocks(self, text: str)  -> list[dict]:
+        # returns a list of dictionary
+        lines=text.split('\n')
+        blocks=[]
+        i = 0
+        
+        while i < len(lines):
+            line=lines[i].strip()
+            
+            # skip if line is empty
+            if not line:
+                i += 1
+                continue
+            
+            # use regex for main detection
+            # Pattern #1: ([A-Z][^:]{1,40})
+            # [A-Z] means the label must start with a capital letter
+            # [^:]{1,40} allows 1-40 non-colon ':' characters
+            # because it uses {1,40}, the label must have at least 2 characters total: 
+            # 'A:' would not match because it still needs 1 more character
+            # '\s*' means zero or more whitespace characters after the colon
+            
+            # Pattern #2: (.*)
+            # captures everything after the colon and optional spaces
+            label_match = re.match(r'^([A-Z][^:]{1,40}):\s*(.*)', line)
+            
+            if label_match:
+                label = label_match.group(1).strip()
+                inline_content = label_match.group(2).strip()
+                
+                # check later lines for content to match with label
+                content_lines=[]
+                if inline_content:
+                    content_lines.append(inline_content)
+                    
+                j = i+1
+                while j<len(lines):
+                    next_line = lines[j].strip()
+                    
+                    # if next line is empty or is the start of another label, break
+                    # AI implementation here
+                    # Use AI to detect if next line is another card
+                    if not next_line:
+                        break
+                    
+                    if re.match(r'^([A-Z][^:]{1,40}):\s*(.*)', next_line):
+                        break
+                    
+                    
+                    content_lines.append(next_line)
+                    j+=1
+                    
+                full_content = ' '.join(content_lines).strip()
+                
+                blocks.append({
+                    'type': 'labeled',
+                    'label': label,
+                    'content': full_content
+                })
+                i=j # jump past the lines we checked
+                
+            # if not a label
+            else:    
+                para_lines=[line]
+                j = i+1
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    if not next_line:
+                        break
+                        
+                    if re.match(r'^([A-Z][^:]{1,40}):\s*(.*)', next_line):
+                        break
+                    
+                    para_lines.append(next_line)
+                    j += 1
+                    
+                blocks.append({
+                    'type': 'paragraph',
+                    'content': ' '.join(para_lines).strip()
+                })
+                i=j
+        return blocks
+            
+        
     def split_sentences(self, text: str) -> list[str]:
         paragraphs=text.split('\n\n')
         
@@ -118,6 +196,7 @@ class FlashCardApp():
             if len(s.strip())>10
         ]
 
+    # return the types of cards, identify cards
     def classify_sentence(self, sentence: str) -> str:
         s=sentence.strip()
         
@@ -159,6 +238,9 @@ class FlashCardApp():
             return self.make_cloze(sentence)
 
         return None
+    
+    
+    
     def make_cloze(self,sentence:str) -> dict:
         words = sentence.split()
         
@@ -177,9 +259,11 @@ class FlashCardApp():
         if not candidates:
             return {'front': sentence, 'back': '(no blank found)'}    
         
+        
         # main areas of replacement for AI
         # currently only uses the last candidate in list
         # potentially implement AI to check accuracy
+        # AI implementation here
         idx, word =  candidates[-1]
         clean_word = word.rstrip('.,;')
         blanked = words.copy()
@@ -188,8 +272,51 @@ class FlashCardApp():
             # joins combines list of strings back into 1 string
             'front': ' '.join(blanked),
             'back': clean_word
-        }        
+        }    
         
+        
+    # deal with questions what is followed by an answer sentence
+    # act as the main function of the program
+    def extract_flashcards(self, text: str) -> list[dict]:
+        text = self.clean_text(text)
+        self.blocks = self.merge_label_blocks(text)
+        sentences = self.split_sentences(text)
+        cards = []
+        
+        for block in self.blocks:
+            if block['type']=='labeled':
+                label = block['label']
+                content = block['content']
+                
+                if content:
+                    cards.append({
+                        'front': F"What is a {label}?",
+                        'back': content
+                    })
+                else:
+                    print(f"Warning: label '{label}' has no content")
+                    
+            elif block['type'] == 'paragraph':
+                # follows previous identification stratagy
+                i=0
+                while i<len(sentences):
+                    s = sentences[i]
+                    kind = self.classify_sentence(s)
+                    
+                    if kind == 'question' and i+1<len(sentences):
+                        cards.append({
+                            'front': s,
+                            'back': sentences[i+1]
+                        })
+                        i+=2
+                        continue
+                    
+                    card = self.sentence_to_flashcard(s)
+                    if card:
+                        cards.append(card)
+                
+                    i +=1
+        return cards
     
 if __name__ =="__main__":
     app=FlashCardApp()
