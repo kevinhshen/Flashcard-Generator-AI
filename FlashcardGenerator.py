@@ -1,11 +1,8 @@
 import os
-
 # import python regex library
 import re
-
 # import pretty print library
 from pprint import pprint
-
 # use natual language tool kit library
 import nltk
 # 'punkt' and 'punkt_tab' are tokenizer data files used by sent_tokenize.
@@ -18,6 +15,38 @@ from nltk.tokenize import sent_tokenize
 
 import time
 import csv
+
+from dotenv import load_dotenv
+from google import genai
+load_dotenv()
+# import Gemini AI 
+from google import genai
+from google.genai import types
+
+api_key=os.getenv("GEMINI_API_KEY")
+
+print("Current working directory:", os.getcwd())
+print("API key loaded:", api_key is not None)
+print("API key preview:", api_key[:8] if api_key else "None")
+
+
+
+#client is an object that lets your Python code talk to Gemini
+# kinda like scanner in java
+client = genai.Client(api_key=api_key)
+response  = client.models.generate_content(
+    model='gemini-2.5-flash',
+    contents=types.Part.from_text(text='Why is the sky blue?'),
+    config=types.GenerateContentConfig(
+        # temperature controls the randomness, lower temperature means more predictable, higher temperature means more creative
+        temperature=0.2,
+        # top_p controls the number of words the model considers when generating
+        top_p=0.95,
+        # top_k consider how many next tokens/words the model considers
+        top_k=20,
+    )
+)
+print(response.text)
 
 class FlashCardApp():
     def __init__(self):
