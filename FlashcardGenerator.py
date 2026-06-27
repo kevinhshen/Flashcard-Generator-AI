@@ -17,7 +17,6 @@ import time
 import csv
 
 from dotenv import load_dotenv
-from google import genai
 load_dotenv()
 # import Gemini AI 
 from google import genai
@@ -26,8 +25,8 @@ from google.genai import types
 api_key=os.getenv("GEMINI_API_KEY")
 
 print("Current working directory:", os.getcwd())
-print("API key loaded:", api_key is not None)
-print("API key preview:", api_key[:8] if api_key else "None")
+print("API key loaded:", os.getenv("GEMINI_API_KEY") is not None)
+print("API key preview:", os.getenv("GEMINI_API_KEY")[:8])
 
 
 
@@ -353,65 +352,6 @@ if __name__ =="__main__":
 
     
 
-# while True:
-    
-#     value = input("Card #"+str(numCard)+": ");
-#     if(value.lower() == "end"):
-#         break
-    
-    
-#     bestSeperater="" 
-#     topScore=0
-#     for seperater in seperaterList:
-#         score=0
-#         line = value.split(seperater)
-#         if len(line) <2:
-#             print("Card invalid")
-#             continue
-#         if len(line) == 2:
-#             score += 2
-#         else:
-#             score -= 2
-
-#         if line[0]=="" or line[1]=="":
-#             score -= 3
-            
-#         front = line[0].strip()
-#         back = line[1].strip()    
-        
-        
-        
-            
-#         if score>topScore:
-#             topScore=score
-#             bestSeperater=seperater
-    
-#     if bestSeperater=="":
-#         print("Card invalid")
-#         continue
-    
-#     front, back = value.split(bestSeperater,1)
-
-#     inputList.append((front, back))
-#     numCard+=1
-    
-# fileName = f"ankiImport_{int(time.time())}.csv"
-
-# with open(fileName,"w", newline="") as file:
-#     writer = csv.writer(file)
-#     for front, back in inputList:
-#         writer.writerow([front, back])
-        
-# print("Saved to: "+fileName)
-# print("File Created, seperater by tab")
-
-        
-
-
-
-
-    
-    
 
 
 
