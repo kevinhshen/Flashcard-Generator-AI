@@ -56,6 +56,8 @@ response  = client.models.generate_content_stream(
         top_k=20,
     )
 )
+
+# output the response line by line
 for stream in response:
     print(stream.text)
 
