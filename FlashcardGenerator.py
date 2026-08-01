@@ -1,4 +1,13 @@
+# Before running the program, we must make sure the vitual environment is correct
+# Steps to do so:
+    # In VS code, Python: Select Interpreter
+    # Select the interpreter containing: env\Scripts\python.exe
+    
+    
+
+
 import os
+
 # import python regex library
 import re
 # import pretty print library
@@ -15,25 +24,27 @@ from nltk.tokenize import sent_tokenize
 
 import time
 import csv
-
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
 # import Gemini AI 
 from google import genai
 from google.genai import types
 
+# Get the folder where this Python file is located
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
 api_key=os.getenv("GEMINI_API_KEY")
 
 print("Current working directory:", os.getcwd())
-print("API key loaded:", os.getenv("GEMINI_API_KEY") is not None)
-print("API key preview:", os.getenv("GEMINI_API_KEY")[:8])
-
-
+print("Python file directory:", BASE_DIR)
+print("API key loaded:", api_key is not None)
+print("API key preview:", api_key[:8] if api_key else "None")
 
 #client is an object that lets your Python code talk to Gemini
 # kinda like scanner in java
 client = genai.Client(api_key=api_key)
-response  = client.models.generate_content(
+response  = client.models.generate_content_stream(
     model='gemini-2.5-flash',
     contents=types.Part.from_text(text='Why is the sky blue?'),
     config=types.GenerateContentConfig(
@@ -45,7 +56,8 @@ response  = client.models.generate_content(
         top_k=20,
     )
 )
-print(response.text)
+for stream in response:
+    print(stream.text)
 
 class FlashCardApp():
     def __init__(self):
