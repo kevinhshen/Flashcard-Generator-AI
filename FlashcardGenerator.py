@@ -43,6 +43,7 @@ print("API key preview:", api_key[:8] if api_key else "None")
 
 #client is an object that lets your Python code talk to Gemini
 # kinda like scanner in java
+"""
 client = genai.Client(api_key=api_key)
 response  = client.models.generate_content_stream(
     model='gemini-2.5-flash',
@@ -60,7 +61,7 @@ response  = client.models.generate_content_stream(
 # output the response line by line
 for stream in response:
     print(stream.text)
-
+"""
 class FlashCardApp():
     def __init__(self):
         self.lines=[]
@@ -84,10 +85,10 @@ class FlashCardApp():
         ]
 
         
-        self.lines=self.user_input_list()
-        
-        for line in self.lines:
-            self.flash_cards.extend(self.extract_flashcards(line))
+        raw_text = "\n".join(self.user_input_list())
+        cleaned_text = self.clean_text(raw_text)
+        print(cleaned_text)
+        self.flash_cards = self.extract_flashcards(cleaned_text)
         
         self.display_list(self.flash_cards)        
     
@@ -114,24 +115,33 @@ class FlashCardApp():
         print("successfully printed")    
             
     def clean_text(self, text: str) -> str:
-        #Converts newline formats with different OS into standard \n
-        text = text.replace('\r\n', '\n').replace('\r', '\n') 
+        # Convert all line-ending styles to \n.
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
 
-        #Collapse multiple empty space into one
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        
-        # Fix spaces around punctuation
+        # Keep one \n between lines; remove blank lines.
+        text = re.sub(r'\n+', '\n', text)
+
+        # Remove spaces before punctuation.
         text = re.sub(r'\s+([?.!,])', r'\1', text)
-        
-        # Collapse multiple spaces
+
+        # Collapse repeated spaces and tabs without removing \n.
         text = re.sub(r'[^\S\n]+', ' ', text)
-        
+
         return text.strip()
     
     # add before split_sentence
-    # Aims to turn raw text into structured blocks, instead of splitting everything into individual sentences
     def merge_label_blocks(self, text: str)  -> list[dict]:
-        # returns a list of dictionary
+        """To identify cloze card, check for label-definition pairs
+            Create the cloze card
+        
+        Args:
+            text: single line of paragraph
+            
+        Returns:
+            a list of dictionary 
+        """
+
+        #Splits when there is a new line
         lines=text.split('\n')
         blocks=[]
         i = 0
@@ -170,7 +180,7 @@ class FlashCardApp():
                     next_line = lines[j].strip()
                     
                     # if next line is empty or is the start of another label, break
-                    # AI implementation here
+                 # AI implementation here
                     # Use AI to detect if next line is another card
                     if not next_line:
                         break
@@ -319,10 +329,13 @@ class FlashCardApp():
         
     # deal with questions what is followed by an answer sentence
     # act as the main function of the program
-    def extract_flashcards(self, text: str) -> list[dict]:
-        text = self.clean_text(text)
-        self.blocks = self.merge_label_blocks(text)
-        sentences = self.split_sentences(text)
+    def extract_flashcards(self, raw_text: str) -> list[dict]:
+        paragraph = self.clean_text(raw_text)
+        
+        # identify label/defintion pairs before spliting into sentences
+        self.blocks = self.merge_label_blocks(paragraph)
+        
+        sentences = self.split_sentences(paragraph)
         cards = []
         
         for block in self.blocks:
