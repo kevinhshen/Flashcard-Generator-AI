@@ -27,7 +27,8 @@ flowchart TD
         2. Collapse multiple empty space into one
         3. Fix spaces around punctuation
         4. Collapse multiple spaces
-    2. 
+    2. run "merge_label_blocks"
+        1. 
     
 
 ## 3. Project files
