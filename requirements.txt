@@ -1,0 +1,3 @@
+google-genai
+nltk
+python-dotenv

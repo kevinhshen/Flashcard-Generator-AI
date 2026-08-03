@@ -130,12 +130,11 @@ class FlashCardApp():
         return text.strip()
     
     # add before split_sentence
-    def merge_label_blocks(self, text: str)  -> list[dict]:
+    def colon_pattern(self, text: str)  -> list[dict]:
         """To identify cloze card, check for label-definition pairs
-            Create the cloze card
         
         Args:
-            text: single line of paragraph
+            text: bulk notes imported from user
             
         Returns:
             a list of dictionary 
@@ -154,17 +153,38 @@ class FlashCardApp():
                 i += 1
                 continue
             
-            # use regex for main detection
-            # Pattern #1: ([A-Z][^:]{1,40})
-            # [A-Z] means the label must start with a capital letter
-            # [^:]{1,40} allows 1-40 non-colon ':' characters
-            # because it uses {1,40}, the label must have at least 2 characters total: 
-            # 'A:' would not match because it still needs 1 more character
-            # '\s*' means zero or more whitespace characters after the colon
+            """
+            Use regex to identify a label followed by a colon and optional content.
+            Pattern: ^([A-Z][^:]{1,40}):\s*(.*)
             
-            # Pattern #2: (.*)
-            # captures everything after the colon and optional spaces
-            label_match = re.match(r'^([A-Z][^:]{1,40}):\s*(.*)', line)
+            '^' means the match must start at the beginning of the line.
+            
+            Pattern #1: ([A-Z][^:]{1,40})
+            This captures the label.
+            '[A-Z]' means the label must start with a capital letter.
+            '[^:]' means any character except a colon.
+            '{1,40}' allows 1 to 40 additional non-colon characters.
+            The label must therefore contain 2 to 41 characters total.
+            For example, 'A:' will not match, but 'AI:' will match.
+            
+            ':' requires a colon immediately after the label.
+            
+            '\s*' means zero or more whitespace characters after the colon.
+            This allows both 'Term:definition' and 'Term: definition'.
+            
+            Pattern #2: (.*)
+            This captures all remaining text after the colon as inline content.
+            The content may be empty, so 'Term:' still matches.
+            """
+            # Implement AI to replace the code algorithm
+            LABEL_PATTERN = re.compile(
+                r"^(?P<label>[A-Z][^:\n]{1,40}?)\s*:\s*(?P<content>.*)$"
+            )
+            
+            # Label/definition patterns on the same line
+            label_match = LABEL_PATTERN.match(line)
+            label = label_match["label"].strip()
+            inline_content = label_match["content"].strip()
             
             if label_match:
                 label = label_match.group(1).strip()
@@ -330,10 +350,19 @@ class FlashCardApp():
     # deal with questions what is followed by an answer sentence
     # act as the main function of the program
     def extract_flashcards(self, raw_text: str) -> list[dict]:
-        paragraph = self.clean_text(raw_text)
+        """ The main function of the program
         
+        Args:
+            raw_text: bulk input from user (cleaned)
+            
+        Returns:
+            list of dictionary
+                The dictionary contains the front and back of a flashcard
+            
+        """
+
         # identify label/defintion pairs before spliting into sentences
-        self.blocks = self.merge_label_blocks(paragraph)
+        self.blocks = self.colon_pattern(raw_text)
         
         sentences = self.split_sentences(paragraph)
         cards = []
