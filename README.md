@@ -10,3 +10,7 @@ How to use:
     The program should automatically create a flashcard file ready for export.
 
 
+Setup code:
+    pip install -r requirements.txt
+    python -m nltk.downloader punkt punkt_tab
+    SSL_CERT_FILE=$(python -m certifi) python -m nltk.downloader punkt punkt_tab
