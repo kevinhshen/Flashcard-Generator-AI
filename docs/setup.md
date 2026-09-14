@@ -1,58 +1,31 @@
 # Setup
 
-This project needs both Python packages and NLTK tokenizer data.
+Use a fresh virtual environment instead of the old `env` directory.
 
-## 1. Activate the virtual environment
-
-### macOS
-
-```bash
-source ".venv/bin/activate"
-```
-
-### Windows PowerShell
+## Windows PowerShell
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\env\Scripts\Activate.ps1
-```
-
-## 2. Install Python packages
-
-```bash
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
-## 3. Download NLTK data
-
-Run this once after installing requirements:
+## macOS or Linux
 
 ```bash
-python -m nltk.downloader punkt punkt_tab
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-## macOS certificate fix
-
-If macOS shows an SSL error like `CERTIFICATE_VERIFY_FAILED`, run:
+NLTK is optional. The program includes a fallback sentence splitter, but you can download NLTK's tokenizer data after installing it:
 
 ```bash
-open "/Applications/Python 3.13/Install Certificates.command"
+python -m nltk.downloader punkt_tab
 ```
 
-Then retry:
+Run the tests before changing generation behavior:
 
 ```bash
-python -m nltk.downloader punkt punkt_tab
-```
-
-If that still fails, use the certificate bundle from `certifi`:
-
-```bash
-SSL_CERT_FILE=$(python -m certifi) python -m nltk.downloader punkt punkt_tab
-```
-
-## Run the app
-
-```bash
-python FlashcardGenerator.py
+python -m unittest discover -s tests -v
 ```
