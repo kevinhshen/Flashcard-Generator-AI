@@ -1,0 +1,6 @@
+# Optional local FLAN-T5 support. Rules mode works with requirements.txt alone.
+-r requirements.txt
+torch>=2.2,<3
+transformers>=4.44,<5
+sentencepiece>=0.2,<1
+safetensors>=0.4,<1

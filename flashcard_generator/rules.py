@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .generation import RuleGenerationResult
 from .models import Flashcard, SourceChunk
 from .parser import split_sentences
 
@@ -114,12 +115,16 @@ def _label_question(label: str) -> str:
     return f"What is {cleaned}?"
 
 
-def generate_rule_cards(chunks: list[SourceChunk]) -> list[Flashcard]:
-    """Generate cards independently for each chunk so source context cannot leak."""
-    cards: list[Flashcard] = []
+def _sentence_source(chunk: SourceChunk, sentence: str, number: int) -> SourceChunk:
+    return SourceChunk(f"{chunk.source_id}:sentence-{number}", sentence, "paragraph")
+
+
+def generate_rule_candidates(chunks: list[SourceChunk]) -> RuleGenerationResult:
+    """Classify rule cards by confidence and retain facts rules cannot express well."""
+    result = RuleGenerationResult()
     for chunk in chunks:
         if chunk.kind == "labeled" and chunk.label:
-            cards.append(
+            result.high_confidence.append(
                 Flashcard(
                     front=_label_question(chunk.label),
                     back=chunk.text.rstrip("."),
@@ -134,21 +139,39 @@ def generate_rule_cards(chunks: list[SourceChunk]) -> list[Flashcard]:
         index = 0
         while index < len(sentences):
             sentence = sentences[index]
+            sentence_chunk = _sentence_source(chunk, sentence, index + 1)
             if _is_question(sentence) and index + 1 < len(sentences) and not _is_question(sentences[index + 1]):
-                cards.append(
+                answer = sentences[index + 1]
+                qa_chunk = SourceChunk(
+                    f"{chunk.source_id}:qa-{index + 1}",
+                    f"{sentence}\n{answer}",
+                    "paragraph",
+                )
+                result.high_confidence.append(
                     Flashcard(
                         front=sentence.rstrip() if sentence.endswith("?") else f"{sentence}?",
-                        back=sentences[index + 1].rstrip("."),
-                        source_text=chunk.text,
-                        source_id=chunk.source_id,
+                        back=answer.rstrip("."),
+                        source_text=qa_chunk.text,
+                        source_id=qa_chunk.source_id,
                         generator="rule",
                     )
                 )
                 index += 2
                 continue
 
-            card = _definition_card(sentence, chunk) or _group_identity_card(sentence, chunk) or _cloze_card(sentence, chunk)
+            card = _definition_card(sentence, sentence_chunk) or _group_identity_card(sentence, sentence_chunk)
             if card:
-                cards.append(card)
+                result.high_confidence.append(card)
+            else:
+                card = _cloze_card(sentence, sentence_chunk)
+                if card:
+                    result.low_confidence.append(card)
+                else:
+                    result.unresolved.append(sentence_chunk)
             index += 1
-    return cards
+    return result
+
+
+def generate_rule_cards(chunks: list[SourceChunk]) -> list[Flashcard]:
+    """Backward-compatible deterministic card generation for rules-only mode."""
+    return generate_rule_candidates(chunks).all_rule_cards
