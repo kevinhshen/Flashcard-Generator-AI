@@ -11,6 +11,15 @@ How to use:
 
 
 Setup code:
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
     python -m nltk.downloader punkt punkt_tab
+
+macOS note:
+    If NLTK fails with CERTIFICATE_VERIFY_FAILED, run:
+    open "/Applications/Python 3.13/Install Certificates.command"
+
+    Then retry:
+    python -m nltk.downloader punkt punkt_tab
+
+    If it still fails:
     SSL_CERT_FILE=$(python -m certifi) python -m nltk.downloader punkt punkt_tab
