@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7fb">
+    <title>Study Cards</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="#editor" aria-label="Study Cards home">
+          <span class="brand-mark">S</span>
+          <span>Study Cards</span>
+        </a>
+        <p class="privacy-note"><span class="status-dot"></span> Local-first · no API key</p>
+      </header>
+
+      <section class="hero" aria-labelledby="page-title">
+        <p class="eyebrow">FLASHCARD WORKSPACE</p>
+        <h1 id="page-title">Turn notes into cards worth studying.</h1>
+        <p class="hero-copy">Paste a lecture, import a text file, tune generation, then review only the cards that need your attention.</p>
+      </section>
+
+      <section class="workspace" id="editor" aria-label="Flashcard generator">
+        <div class="notes-panel panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">SOURCE NOTES</p>
+              <h2>Your material</h2>
+            </div>
+            <span id="word-count" class="quiet-count">0 words</span>
+          </div>
+
+          <label class="sr-only" for="notes">Paste study notes</label>
+          <textarea id="notes" spellcheck="true" placeholder="Paste your study notes here…&#10;&#10;Example:&#10;Photosynthesis: Plants convert light energy into chemical energy."></textarea>
+
+          <div class="notes-tools">
+            <label class="file-button" for="note-file">
+              <input id="note-file" type="file" accept=".txt,text/plain">
+              <span>Import .txt</span>
+            </label>
+            <button id="example-button" class="text-button" type="button">Use example</button>
+            <button id="clear-button" class="text-button muted" type="button">Clear</button>
+            <span id="file-name" class="file-name" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <aside class="settings-panel panel" aria-labelledby="settings-heading">
+          <div class="panel-heading compact">
+            <div>
+              <p class="eyebrow">GENERATION</p>
+              <h2 id="settings-heading">Settings</h2>
+            </div>
+          </div>
+
+          <fieldset class="engine-fieldset">
+            <legend>Generation engine</legend>
+            <div class="engine-options">
+              <label class="engine-option">
+                <input type="radio" name="engine" value="rules">
+                <span><strong>Rules</strong><small>Fast, offline baseline</small></span>
+              </label>
+              <label class="engine-option selected">
+                <input type="radio" name="engine" value="hybrid" checked>
+                <span><strong>Hybrid</strong><small>Rules first, FLAN for uncertain facts</small></span>
+              </label>
+              <label class="engine-option">
+                <input type="radio" name="engine" value="flan">
+                <span><strong>FLAN only</strong><small>Evaluate model output across all notes</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div id="ai-settings" class="ai-settings">
+            <label for="polish">Card quality pass</label>
+            <select id="polish">
+              <option value="auto" selected>Auto — fix clear fragments</option>
+              <option value="off">Off — retain rule cards</option>
+              <option value="all">All — check every rule card</option>
+            </select>
+            <div class="settings-row">
+              <label for="device">Device
+                <select id="device">
+                  <option value="auto" selected>Auto</option>
+                  <option value="cpu">CPU</option>
+                  <option value="cuda">CUDA</option>
+                  <option value="mps">Apple Silicon</option>
+                </select>
+              </label>
+              <label class="switch-label" for="offline">
+                <span>Offline cache only</span>
+                <input id="offline" type="checkbox">
+              </label>
+            </div>
+          </div>
+
+          <button id="generate-button" class="primary-button" type="button">
+            <span>Generate flashcards</span><kbd>Ctrl ↵</kbd>
+          </button>
+          <p class="settings-help">Hybrid needs the local FLAN setup. Rules mode always works offline.</p>
+        </aside>
+      </section>
+
+      <section id="results" class="results hidden" aria-labelledby="results-heading">
+        <div class="results-heading">
+          <div>
+            <p class="eyebrow">REVIEW</p>
+            <h2 id="results-heading">Your flashcards</h2>
+            <p id="results-summary" class="results-summary" aria-live="polite"></p>
+          </div>
+          <div class="result-actions">
+            <label class="filter-toggle"><input id="ai-filter" type="checkbox"> AI cards only</label>
+            <button id="export-button" class="secondary-button" type="button">Export Anki TSV <kbd>Ctrl S</kbd></button>
+          </div>
+        </div>
+        <div id="notice" class="notice hidden" role="status"></div>
+        <div id="cards" class="cards" aria-live="polite"></div>
+        <div id="empty-results" class="empty-results hidden">
+          <h3>No cards match this view.</h3>
+          <p>Turn off the AI-only filter or generate a new set from your notes.</p>
+        </div>
+      </section>
+    </main>
+
+    <template id="card-template">
+      <article class="card">
+        <div class="card-topline">
+          <span class="badge"></span>
+          <div class="card-actions">
+            <button class="icon-button regenerate-button" type="button" title="Regenerate from source" aria-label="Regenerate from source">↻</button>
+            <button class="icon-button delete-button" type="button" title="Remove card" aria-label="Remove card">×</button>
+          </div>
+        </div>
+        <label>Question<textarea class="card-front" rows="2"></textarea></label>
+        <label>Answer<textarea class="card-back" rows="2"></textarea></label>
+        <details class="source-details">
+          <summary>View source</summary>
+          <p class="source-text"></p>
+        </details>
+      </article>
+    </template>
+
+    <script>
+      window.STUDY_CARDS_CONFIG = { defaultModel: {{ default_model|tojson }} };
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

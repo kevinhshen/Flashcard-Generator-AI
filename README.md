@@ -60,6 +60,25 @@ To paste notes instead, run `python FlashcardGenerator.py`, paste text, then ent
 
 In Anki, import the generated TSV file as UTF-8 text with tab-separated fields and no header row.
 
+## Web app
+
+The local web app uses the same generation and validation pipeline as the command line. It keeps the notes draft in your browser, reads `.txt` imports in the browser, and creates the TSV download in the browser.
+
+```powershell
+python -m pip install -r requirements-web.txt
+python run_web_app.py
+```
+
+Open `http://127.0.0.1:5000` in your browser. For Hybrid or FLAN-only generation, also install `requirements-ai.txt`.
+
+The web app includes:
+
+- Paste notes, import a `.txt` file, use an example, and retain a local browser draft
+- Rules, Hybrid, and FLAN-only generation modes
+- Quality-pass and device settings for AI modes
+- Editable cards, source visibility, AI-card filtering, and model regeneration from a card's source
+- Anki TSV download without writing your notes to a server-side output file
+
 ## Test
 
 ```powershell
