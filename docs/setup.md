@@ -29,3 +29,17 @@ Run the tests before changing generation behavior:
 ```bash
 python -m unittest discover -s tests -v
 ```
+For Hybrid or FLAN generation:
+
+```powershell
+python -m pip install -r requirements-ai.txt
+```
+
+## Local web app
+
+```powershell
+python -m pip install -r requirements-web.txt
+python run_web_app.py
+```
+
+Then open `http://127.0.0.1:5000`. The app is bound to your own computer only.

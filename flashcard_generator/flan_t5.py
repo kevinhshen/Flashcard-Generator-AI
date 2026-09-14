@@ -172,8 +172,11 @@ class FlanT5Generator:
             import torch
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
         except ImportError as error:
+            missing = error.name or str(error)
             raise FlanT5UnavailableError(
-                "FLAN mode needs the optional AI packages. Run: pip install -r requirements-ai.txt"
+                "FLAN mode could not import "
+                f"'{missing}'. Activate the project .venv, then run: "
+                "python -m pip install -r requirements-ai.txt"
             ) from error
 
         device = _select_device(torch, self.requested_device)

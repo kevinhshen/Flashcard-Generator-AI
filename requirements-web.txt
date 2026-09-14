@@ -1,0 +1,3 @@
+# Web interface. Install requirements-ai.txt as well when using FLAN engines.
+-r requirements.txt
+Flask>=3.0,<4
