@@ -1,25 +1,55 @@
-This is a capstone project to prepare myself for university and review the Python language.
+# Local Flashcard Generator
 
-This FlashcardGenerator intended to accept user's notes and convert them into flashcards ready for export. This system uses both code algorithm and AI detection.
+This project converts study notes into reviewable flashcards and exports an Anki-compatible TSV file. The current version uses deterministic local rules only: it has no API key and no cloud AI dependency.
 
-The AI used for this project is the "gemini-2.5-flash"
+## Current capabilities
 
-How to use:
-    Ensure the virture environment is properly selected with all the required packages installed.
-    Run the main file "FlashcardGenerator.py" and follow the terminal prompt
-    The program should automatically create a flashcard file ready for export.
+- Reads pasted notes or a UTF-8 text file
+- Preserves paragraph and labelled-section boundaries
+- Creates cards from labels, definitions, question/answer pairs, and factual cloze statements
+- Removes invalid and duplicate cards
+- Exports tab-separated front/back fields that Anki can import
 
+## Setup
 
-Setup code:
-    python -m pip install -r requirements.txt
-    python -m nltk.downloader punkt punkt_tab
+Create a virtual environment, activate it, and install the optional sentence-tokenization dependency.
 
-macOS note:
-    If NLTK fails with CERTIFICATE_VERIFY_FAILED, run:
-    open "/Applications/Python 3.13/Install Certificates.command"
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
 
-    Then retry:
-    python -m nltk.downloader punkt punkt_tab
+The program works without NLTK or downloaded NLTK data by using a standard-library sentence splitter. To use NLTK's sentence splitter, install the requirement above and optionally download its tokenizer data:
 
-    If it still fails:
-    SSL_CERT_FILE=$(python -m certifi) python -m nltk.downloader punkt punkt_tab
+```powershell
+python -m nltk.downloader punkt_tab
+```
+
+## Run
+
+Generate and export cards from an included note file:
+
+```powershell
+python FlashcardGenerator.py --input note1.txt --output flashcards.tsv
+```
+
+Preview without writing a file:
+
+```powershell
+python FlashcardGenerator.py --input note1.txt --no-export
+```
+
+To paste notes instead, run `python FlashcardGenerator.py`, paste text, then enter `END` on its own line.
+
+In Anki, import the generated TSV file as UTF-8 text with tab-separated fields and no header row.
+
+## Test
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+## Next milestone
+
+Build an evaluation set from reviewed source chunks, then add FLAN-T5 Base as an optional local generator behind the existing validation and export pipeline. See [the architecture notes](docs/architecture.md).
