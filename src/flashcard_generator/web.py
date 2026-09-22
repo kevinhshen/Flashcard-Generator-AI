@@ -9,7 +9,7 @@ import webbrowser
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
-from .ai import generate_deck, has_api_key, safe_ai_error
+from .ai import generate_deck, ollama_status, safe_ai_error
 from .generator import generate_local
 from .importers import MAX_FILE_BYTES, MAX_TEXT_CHARS, extract_notes
 from .jobs import JobStore
@@ -28,11 +28,11 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html", ai_available=has_api_key())
+        return render_template("index.html")
 
     @app.get("/api/status")
     def status():
-        return jsonify({"ok": True, "ai_available": has_api_key()})
+        return jsonify({"ok": True, "ai": ollama_status()})
 
     @app.post("/api/import")
     def import_file():
@@ -64,15 +64,6 @@ def create_app() -> Flask:
             return None, (
                 jsonify(error="Not enough usable text. Enter a definition or complete question/answer."),
                 422,
-            )
-        if use_ai and not has_api_key():
-            return None, (
-                jsonify(
-                    error="Gemini is not configured. Add GEMINI_API_KEY to .env and restart, "
-                    "or select Local rules.",
-                    error_code="missing_key",
-                ),
-                400,
             )
         return (notes, count, use_ai), None
 

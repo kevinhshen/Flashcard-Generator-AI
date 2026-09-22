@@ -35,12 +35,11 @@
           <div class="control-group">
             <label for="generation-mode">Generator</label>
             <select id="generation-mode" aria-describedby="mode-help">
-              <option value="ai" selected>Gemini · reviewed AI{% if not ai_available %} (key required){% endif %}</option>
+              <option value="ai" selected>Ollama · local reviewed AI</option>
               <option value="local">Local rules · limited coverage</option>
             </select>
-            <small id="mode-help">Sends notes to Google. Inventories facts, audits omissions, drafts and reviews cards.
-              Multiple requests cost more and can take several minutes.
-              {% if not ai_available %}Add GEMINI_API_KEY to .env and restart to enable generation.{% endif %}</small>
+            <small id="mode-help">Runs on your computer through Ollama. Inventories facts, audits omissions,
+              drafts and reviews cards. Start Ollama and pull the configured model before generating.</small>
           </div>
         </div>
         <button id="generate-button" class="primary-button" type="button"><span>Generate</span><span>↵</span></button>

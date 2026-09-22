@@ -1,15 +1,16 @@
+import json
 from threading import Event
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from urllib.error import URLError
 
 import pytest
 
 from flashcard_generator.ai import (
     AIError,
     Cancelled,
-    GeminiProvider,
     Inventory,
+    OllamaProvider,
     generate_deck,
+    ollama_status,
     safe_ai_error,
     split_source,
 )
@@ -75,23 +76,62 @@ def test_audit_correction_does_not_resurrect_misread_fact():
     assert "One address stores four bytes" in result["coverage"]["exclusions"][0]["reason"]
 
 
-def test_sdk_uses_structured_output_and_detects_truncated_responses(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
-    fake = MagicMock()
-    fake.models.generate_content.return_value = SimpleNamespace(
-        parsed=Inventory(facts=[]), candidates=[]
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+def test_ollama_uses_local_structured_output_without_api_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    requests = []
+
+    def open_request(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse({"response": '{"facts": [], "exclusions": []}', "done": True})
+
+    provider = OllamaProvider(
+        base_url="http://127.0.0.1:11434", model="test-model", timeout=12, opener=open_request
     )
-    monkeypatch.setattr("google.genai.Client", lambda **kwargs: fake)
-    provider = GeminiProvider()
     assert provider.ask("inventory", {"owned_section": NOTES}, Inventory).facts == []
-    config = fake.models.generate_content.call_args.kwargs["config"]
-    assert config.response_schema is Inventory
-    assert "engineering tutor" in config.system_instruction
-    fake.models.generate_content.return_value.candidates = [SimpleNamespace(finish_reason="MAX_TOKENS")]
+    request, timeout = requests[0]
+    payload = json.loads(request.data)
+    assert request.full_url == "http://127.0.0.1:11434/api/generate"
+    assert timeout == 12
+    assert payload["model"] == "test-model"
+    assert payload["stream"] is False
+    assert payload["think"] is False
+    assert payload["format"] == Inventory.model_json_schema()
+    assert payload["options"]["temperature"] == 0
+    assert "engineering tutor" in payload["system"]
+
+
+def test_ollama_connection_failure_is_actionable():
+    def unavailable(_request, timeout):
+        raise URLError("private network details")
+
+    provider = OllamaProvider(opener=unavailable)
     with pytest.raises(AIError) as failure:
         provider.ask("inventory", {"owned_section": NOTES}, Inventory)
-    assert failure.value.code == "truncated_output"
-    provider.close()
+    assert failure.value.code == "service_unavailable"
+    assert "private network details" not in str(failure.value)
+
+
+def test_ollama_status_reports_configured_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3:8b")
+    monkeypatch.setattr(
+        "flashcard_generator.ai.urlopen",
+        lambda _request, timeout: FakeResponse({"models": [{"name": "qwen3:8b"}]}),
+    )
+    assert ollama_status() == {"available": True, "model": "qwen3:8b", "model_installed": True}
 
 
 @pytest.mark.parametrize("notes", ["x" * 13001, "first\n\n" * 3000, "alpha beta " * 1500])
@@ -192,7 +232,7 @@ def test_missing_reviewed_fact_gets_targeted_repair():
 
 @pytest.mark.parametrize(
     "code,expected",
-    [(403, "authentication"), (404, "model_unavailable"), (429, "quota"), (503, "provider_unavailable")],
+    [(403, "authentication"), (404, "model_unavailable"), (503, "provider_unavailable")],
 )
 def test_provider_errors_are_actionable_without_secrets(code, expected):
     error = RuntimeError("secret-key-and-private-notes")

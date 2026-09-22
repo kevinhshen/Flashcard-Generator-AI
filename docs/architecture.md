@@ -5,13 +5,13 @@ The application has three deliberately separate layers:
 1. `generator.py` parses notes and creates deterministic cards without network access.
 2. `ai.py` inventories and audits facts, drafts and reviews cards, and calculates traceable coverage.
 3. `web.py` exposes the UI/API and `jobs.py` runs one background job with progress and cancellation.
-   The API key stays on the server. AI is the default; local rules must be selected explicitly.
+   Ollama runs the model locally. AI is the default; local rules must be selected explicitly.
 
 ```mermaid
 flowchart TD
     A[Notes in browser] --> B{AI enabled?}
     B -- No --> C[Local parser]
-    B -- Yes --> D[Gemini inventory and review pipeline]
+    B -- Yes --> D[Local Ollama inventory and review pipeline]
     D -- API failure --> H[Explicit error; preserve deck]
     C --> E[Validate and deduplicate]
     D --> E
@@ -44,15 +44,15 @@ Caps are applied after every section has been processed. Coverage is computed fr
 it is not a semantic proof. Model errors can survive all passes, and a fact missed by both extraction calls
 will not appear in the denominator. The UI discloses this and marks counts stale after manual edits.
 
-Requests use structured Pydantic schemas, low temperature, an explicit system instruction, a 90-second timeout,
-and one transient-server-error retry. Source notes are delimited as untrusted data. This reduces but cannot
+Requests use Ollama structured outputs with Pydantic schemas, zero temperature, an explicit system instruction,
+and a configurable timeout. Source notes are delimited as untrusted data. This reduces but cannot
 guarantee immunity to source prompt injection. The model has no tools or filesystem access.
 
 ## Background jobs
 
 `POST /api/jobs` starts generation, `GET /api/jobs/<id>` polls progress/results, and
 `POST /api/jobs/<id>/cancel` sets a cooperative cancellation flag checked between requests. One worker prevents
-unbounded paid concurrency. Finished jobs expire after 30 minutes and only ten are retained. Jobs and results
+unbounded CPU/GPU load. Finished jobs expire after 30 minutes and only ten are retained. Jobs and results
 stay in memory; the browser stores the job ID in session storage to reconnect after refresh. Restarting the
 server invalidates jobs. This is a single-process, single-user local application, not a multi-worker service.
 The synchronous `/api/generate` endpoint remains available for scripts.
@@ -62,5 +62,5 @@ The synchronous `/api/generate` endpoint remains available for scripts.
 AI failures return an explicit error, never local cards. The UI preserves the previous deck on errors or empty
 responses. Browser notes use best-effort local storage; storage failures never prevent interaction.
 PDF text extraction is local via pypdf. Scanned pages require OCR and generate a warning or an error.
-Provider error messages are mapped to safe error codes rather than exposing raw SDK responses or secrets.
-Cancellation waits for the current request and any SDK retry; it does not forcibly terminate network I/O.
+Ollama errors are mapped to safe error codes rather than exposing raw responses or source text.
+Cancellation waits for the current request; it does not forcibly terminate local inference.

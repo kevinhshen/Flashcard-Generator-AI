@@ -1,7 +1,7 @@
 """Deterministic, offline flashcard generation.
 
 The local generator is deliberately conservative: every answer is copied from
-the supplied notes, so it remains useful when Gemini is unavailable and cannot
+the supplied notes, so it remains useful when Ollama is unavailable and cannot
 invent facts that were not in the source material.
 """
 
