@@ -3,114 +3,81 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Turn study notes into editable, export-ready flashcards.">
-  <title>Recall — AI Flashcard Generator</title>
+  <title>Recall</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Recall home">
-      <span class="brand-mark">R</span>
-      <span>Recall</span>
-    </a>
-    <div class="privacy-note">Your notes stay local unless AI mode is enabled.</div>
+    <a class="brand" href="/" aria-label="Recall home"><span class="brand-mark">R</span> Recall</a>
+    <a class="text-button" href="#study-section">Jump to check ↓</a>
   </header>
-
   <main class="page-shell">
-    <section class="hero">
-      <p class="eyebrow">AI flashcard generator</p>
-      <h1>Turn your notes into<br><span>questions worth remembering.</span></h1>
-      <p class="hero-copy">Paste class notes, generate focused recall cards, edit the result, and export a clean CSV for Anki or another study app.</p>
-    </section>
-
-    <section class="workspace" aria-label="Flashcard generator">
-      <div class="input-panel panel">
+    <h1 class="sr-only">Recall flashcards</h1>
+    <section class="workspace" aria-label="Flashcard workspace">
+      <section class="input-panel panel" aria-labelledby="source-heading">
         <div class="panel-heading">
-          <div>
-            <p class="step-label">01 · SOURCE</p>
-            <h2>Study notes</h2>
-          </div>
-          <label class="file-button" for="notes-file">Import file</label>
-          <input id="notes-file" type="file" accept=".txt,.md,text/plain,text/markdown" hidden>
+          <h2 id="source-heading"><span class="step-label">01</span> Source</h2>
+          <button id="import-button" class="secondary-button" type="button">Import TXT / MD / PDF</button>
+          <input id="notes-file" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" hidden>
         </div>
-
         <label class="sr-only" for="notes">Study notes</label>
-        <textarea id="notes" spellcheck="true" placeholder="Paste notes here…&#10;&#10;Tip: headings like “Photosynthesis:” work well in local mode."></textarea>
+        <textarea id="notes" maxlength="200000" placeholder="Paste notes. Local rules recognize Term: definition and explicit question/answer pairs."></textarea>
         <div class="textarea-meta">
-          <button id="sample-button" class="text-button" type="button">Try an example</button>
+          <button id="sample-button" class="text-button" type="button">Load example</button>
           <span id="character-count">0 characters</span>
         </div>
-
         <div class="controls">
           <div class="control-group">
-            <label for="card-count">Maximum cards <strong id="card-count-value">20</strong></label>
-            <input id="card-count" type="range" min="5" max="50" step="5" value="20">
+            <label for="card-count">Maximum cards</label>
+            <input id="card-count" type="number" min="1" max="500" step="1" value="30">
+            <small>1–500. An upper bound, not a quota; fewer cards may be justified.</small>
           </div>
-          <label class="mode-control{% if not ai_available %} disabled{% endif %}">
-            <span>
-              <strong>Improve with Gemini</strong>
-              <small>{% if ai_available %}More selective, focused cards{% else %}Add an API key to enable{% endif %}</small>
-            </span>
-            <input id="ai-toggle" type="checkbox" {% if not ai_available %}disabled{% endif %}>
-            <span class="switch" aria-hidden="true"></span>
-          </label>
+          <div class="control-group">
+            <label for="generation-mode">Generator</label>
+            <select id="generation-mode" aria-describedby="mode-help">
+              <option value="local">Local rules · no AI</option>
+              <option value="ai" {% if not ai_available %}disabled{% endif %}>Gemini · cloud AI{% if not ai_available %} (key required){% endif %}</option>
+            </select>
+            <small id="mode-help">Pattern matching only. Nothing is sent to Google.</small>
+          </div>
         </div>
+        <button id="generate-button" class="primary-button" type="button"><span>Generate</span><span>↵</span></button>
+        <p class="shortcut">Ctrl/⌘ + Enter</p>
+      </section>
 
-        <button id="generate-button" class="primary-button" type="button">
-          <span>Generate flashcards</span>
-          <span aria-hidden="true">→</span>
-        </button>
-        <p class="shortcut">Ctrl/⌘ + Enter to generate</p>
-      </div>
-
-      <div class="output-panel panel">
+      <section class="output-panel panel" aria-labelledby="review-heading">
         <div class="panel-heading">
-          <div>
-            <p class="step-label">02 · REVIEW</p>
-            <h2>Your deck <span id="card-total" class="count-pill">0</span></h2>
-          </div>
+          <h2 id="review-heading"><span class="step-label">02</span> Review <span id="card-total" class="count-pill">0</span></h2>
           <div class="output-actions">
-            <button id="add-button" class="secondary-button" type="button">+ Add</button>
-            <button id="export-button" class="secondary-button dark" type="button" disabled>Export CSV</button>
+            <button id="add-button" class="secondary-button" type="button">+ Add card</button>
+            <button id="export-button" class="secondary-button" type="button" disabled>Export CSV</button>
           </div>
         </div>
-
+        <p id="deck-mode" class="deck-mode">No deck generated</p>
         <div id="notice" class="notice" role="status" hidden></div>
-        <div id="empty-state" class="empty-state">
-          <div class="empty-icon" aria-hidden="true"><span>?</span></div>
-          <h3>Your cards will appear here</h3>
-          <p>Generate a deck, then edit any question or answer before exporting it.</p>
+        <div class="review-scroll" tabindex="0" role="region" aria-label="Scrollable flashcard review">
+          <div id="empty-state" class="empty-state"><p>No cards. Generate a deck or add one manually.</p></div>
+          <div id="cards" class="cards"></div>
         </div>
-        <div id="cards" class="cards" aria-live="polite"></div>
-      </div>
+      </section>
     </section>
 
-    <section id="study-section" class="study-section" hidden>
-      <div>
-        <p class="step-label">03 · CHECK</p>
-        <h2>Quick study preview</h2>
-        <p>Click the card to reveal the answer.</p>
+    <section id="study-section" class="study-section panel">
+      <div class="panel-heading">
+        <h2><span class="step-label">03</span> Check</h2>
+        <span id="study-progress">0 / 0</span>
       </div>
-      <button id="study-card" class="study-card" type="button">
-        <span id="study-side" class="study-side">QUESTION</span>
-        <strong id="study-text"></strong>
-        <small>Click to flip</small>
+      <button id="study-card" class="study-card" type="button" disabled>
+        <span id="study-side" class="field-label">QUESTION</span>
+        <strong id="study-text">Generate or add cards to start.</strong>
+        <small>Click or press Space to flip</small>
       </button>
       <div class="study-nav">
-        <button id="previous-card" type="button" aria-label="Previous card">←</button>
-        <span id="study-progress">1 / 1</span>
-        <button id="next-card" type="button" aria-label="Next card">→</button>
+        <button id="previous-card" class="secondary-button" type="button" disabled aria-label="Previous card">← Previous</button>
+        <button id="next-card" class="secondary-button" type="button" disabled aria-label="Next card">Next →</button>
       </div>
     </section>
   </main>
-
-  <footer>
-    <span>Recall</span>
-    <span>Built for active recall, not passive rereading.</span>
-  </footer>
-  <script>
-    window.APP_CONFIG = { aiAvailable: {{ ai_available | tojson }} };
-  </script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

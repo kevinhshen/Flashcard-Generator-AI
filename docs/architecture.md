@@ -11,7 +11,7 @@ flowchart TD
     A[Notes in browser] --> B{AI enabled?}
     B -- No --> C[Local parser]
     B -- Yes --> D[Gemini structured output]
-    D -- API failure --> C
+    D -- API failure --> H[Explicit error; preserve deck]
     C --> E[Validate and deduplicate]
     D --> E
     E --> F[Edit and preview]
@@ -21,7 +21,8 @@ flowchart TD
 ## Local generation pipeline
 
 The local parser preserves paragraphs, identifies `Label: content` blocks, pairs explicit questions with the
-following sentence, recognizes common definition patterns, and converts other factual sentences to cloze cards.
+following sentence, recognizes common definition patterns, and creates quantity-with-unit cloze cards.
+Uncertain text is skipped. No language model runs in local mode.
 All local answers are copied from the source notes.
 
 ## AI generation pipeline
@@ -32,5 +33,6 @@ technical notation. The response is validated, normalized, deduplicated, and cap
 
 ## Failure behavior
 
-If AI mode fails because of a missing key, quota issue, model error, or network problem, the API returns locally
-generated cards with a warning instead of losing the user's work. Browser notes are saved in local storage.
+AI failures return an explicit error, never local cards. The UI preserves the previous deck on errors or empty
+responses. Browser notes use best-effort local storage; storage failures never prevent interaction.
+PDF text extraction is local via pypdf. Scanned pages require OCR and generate a warning or an error.

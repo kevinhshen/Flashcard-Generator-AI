@@ -8,12 +8,14 @@ The app runs on your computer. Starting it opens the interface automatically in 
 
 ## Features
 
-- Paste notes or import a `.txt`/`.md` file.
+- Paste notes or import UTF-8 text, Markdown, or a text-based PDF (up to 10 MB / 200 pages).
 - Generate cards locally with no account, API key, or internet connection.
 - Optionally use Gemini structured output for stronger, more atomic questions.
 - Edit, add, delete, and preview cards before export.
 - Export UTF-8 CSV with `Front`, `Back`, and `Type` columns.
-- Fall back to local generation if the Gemini request fails.
+- Explicit Local rules / Gemini modes; AI errors never silently switch generators.
+- Independent review scrolling, focused top-insert for new cards, and source excerpts.
+- Choose a maximum of 1–500 cards. The generator may return fewer, not pad weak material.
 - Preserve unfinished notes in browser local storage.
 - Validate and deduplicate generated cards.
 - Run automated tests and lint checks in GitHub Actions.
@@ -70,7 +72,7 @@ python FlashcardGenerator.py
 
 ## Optional Gemini setup
 
-Local mode works immediately. To enable **Improve with Gemini**:
+Local mode works immediately. To enable **Gemini · cloud AI** in the Generator selector:
 
 1. Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
 2. Copy `.env.example` to a new file named `.env`.
@@ -93,7 +95,7 @@ JavaScript. AI mode sends the pasted notes to the Gemini API; local mode does no
 
 1. Paste notes or choose **Import file**.
 2. Select a maximum number of cards.
-3. Leave Gemini off for private, instant local generation, or enable it for higher-quality question selection.
+3. Select **Local rules · no AI** for offline pattern matching, or **Gemini · cloud AI** to send notes to Google.
 4. Choose **Generate flashcards** or press `Ctrl/⌘ + Enter`.
 5. Correct or refine any card in the review panel.
 6. Use the preview to check whether each question is answerable without seeing the back.
@@ -118,15 +120,28 @@ whether Recall produced a `basic` or `cloze` card; it can be ignored if your tar
 ### Local mode
 
 The local generator groups labelled sections and paragraphs, pairs questions with following answers, recognizes
-common definition patterns, and makes source-grounded cloze cards from other factual sentences. It does not call
+common definition patterns, and makes cloze cards only for recognized numerical quantities with units.
+It skips uncertain prose instead of blanking arbitrary words. It does not call
 an external service, and every answer is copied from the notes.
 
 ### Gemini mode
 
 The Gemini prompt requests atomic active-recall questions and forbids outside facts. A Pydantic schema constrains
 the response to flashcard objects. The app then validates fields, normalizes card types, removes duplicates, and
-enforces the requested limit. Structured output improves formatting reliability, but AI-generated cards should
-still be reviewed for factual accuracy.
+enforces the requested limit. Each accepted card must include a source excerpt found in the notes.
+This checks source presence, not logical entailment: an answer can still misinterpret its excerpt.
+Review the expandable source excerpt, especially after editing. No live model-quality benchmark is claimed.
+
+AI requests time out after 60 seconds, with no automatic retry or silent local fallback. The UI also has a
+75-second deadline, blocks duplicate submissions, and keeps the old deck on errors or empty results.
+For large decks, the model can return fewer than requested because of response limits; split long notes.
+
+### PDF import
+
+PDF text is extracted locally with pypdf and placed in the editable notes field before generation.
+Image-only/scanned PDFs require OCR and are not supported yet. Mixed PDFs show a warning for pages without
+extractable text. Diagrams, handwriting, mathematical layout, and reading order are not reliably recovered.
+Password-protected, malformed, oversized, and empty files show errors without replacing your notes.
 
 See [docs/architecture.md](docs/architecture.md) for the data flow and failure behavior.
 
@@ -164,6 +179,16 @@ ruff check .
 pytest --cov=flashcard_generator --cov-report=term-missing
 ```
 
+Frontend regression tests (Node.js 20+ is needed only for development):
+
+```bash
+npm ci
+npm test
+```
+
+These exercise DOM state, add-card focus, mode labels, storage failures, repeated submissions,
+and error recovery. They are not a substitute for pixel-level browser QA.
+
 The web API can also be tested directly:
 
 ```bash
@@ -193,7 +218,7 @@ for the current PowerShell process only.
 ## Current limitations
 
 - Local mode uses linguistic heuristics and is less selective than AI mode.
-- Only text and Markdown files are imported; PDF and image OCR are not included.
+- Text-based PDF import is supported; scanned PDF/image OCR is not included.
 - Gemini requires an API key, internet access, and available quota.
 - The app is intended for local use and has no user accounts or shared cloud decks.
 - Generated cards should be reviewed before relying on them for high-stakes material.

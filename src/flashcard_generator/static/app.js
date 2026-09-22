@@ -1,204 +1,204 @@
-const notesInput = document.querySelector("#notes");
-const fileInput = document.querySelector("#notes-file");
-const characterCount = document.querySelector("#character-count");
-const countInput = document.querySelector("#card-count");
-const countValue = document.querySelector("#card-count-value");
-const aiToggle = document.querySelector("#ai-toggle");
-const generateButton = document.querySelector("#generate-button");
-const exportButton = document.querySelector("#export-button");
-const addButton = document.querySelector("#add-button");
-const sampleButton = document.querySelector("#sample-button");
-const cardsContainer = document.querySelector("#cards");
-const emptyState = document.querySelector("#empty-state");
-const cardTotal = document.querySelector("#card-total");
-const notice = document.querySelector("#notice");
-const studySection = document.querySelector("#study-section");
-const studyCard = document.querySelector("#study-card");
-const studySide = document.querySelector("#study-side");
-const studyText = document.querySelector("#study-text");
-const studyProgress = document.querySelector("#study-progress");
-
+const $ = (selector) => document.querySelector(selector);
+const notesInput = $("#notes");
+const fileInput = $("#notes-file");
+const countInput = $("#card-count");
+const modeInput = $("#generation-mode");
+const generateButton = $("#generate-button");
+const cardsContainer = $("#cards");
+const reviewScroll = $(".review-scroll");
+const notice = $("#notice");
 let cards = [];
 let studyIndex = 0;
 let showingAnswer = false;
+let busy = false;
 
-const sampleNotes = `Photosynthesis: The process by which plants convert light energy into chemical energy.
-
-Chlorophyll absorbs light most strongly in the blue and red portions of the electromagnetic spectrum. The light-dependent reactions occur in the thylakoid membranes.
-
-Where does the Calvin cycle occur? It occurs in the stroma of the chloroplast.`;
-
-function updateNoteMeta() {
-  characterCount.textContent = `${notesInput.value.length.toLocaleString()} characters`;
-  localStorage.setItem("recall-notes", notesInput.value);
+function saveNotes() {
+  $("#character-count").textContent = notesInput.value.length.toLocaleString() + " characters";
+  // Storage can be disabled or full. This must never disable the rest of the app.
+  try { localStorage.setItem("recall-notes", notesInput.value); } catch {}
 }
-
-function showNotice(message, isError = false) {
+function showNotice(message, error = false) {
   notice.textContent = message;
-  notice.classList.toggle("error", isError);
+  notice.classList.toggle("error", error);
   notice.hidden = !message;
 }
-
+function setBusy(value) {
+  busy = value;
+  for (const selector of ["#generate-button", "#import-button", "#sample-button", "#generation-mode", "#card-count", "#add-button"]) {
+    $(selector).disabled = value;
+  }
+  notesInput.readOnly = value;
+  cardsContainer.querySelectorAll("textarea, button").forEach((element) => { element.disabled = value; });
+  generateButton.firstElementChild.textContent = value ? "Processing…" : "Generate";
+  generateButton.setAttribute("aria-busy", String(value));
+}
+function renderStudyCard() {
+  const card = cards[studyIndex];
+  $("#study-card").disabled = !card;
+  $("#previous-card").disabled = !card;
+  $("#next-card").disabled = !card;
+  $("#study-progress").textContent = card ? (studyIndex + 1) + " / " + cards.length : "0 / 0";
+  $("#study-side").textContent = showingAnswer ? "ANSWER" : "QUESTION";
+  $("#study-text").textContent = card ? (showingAnswer ? card.back : card.front) || "(Empty field)" : "Generate or add cards to start.";
+  $("#study-card").classList.toggle("answer", showingAnswer);
+}
 function updateDeckState() {
-  cardTotal.textContent = cards.length;
-  emptyState.hidden = cards.length > 0;
-  exportButton.disabled = cards.length === 0;
-  studySection.hidden = cards.length === 0;
-  if (studyIndex >= cards.length) studyIndex = Math.max(0, cards.length - 1);
+  $("#card-total").textContent = cards.length;
+  $("#empty-state").hidden = cards.length > 0;
+  $("#export-button").disabled = !cards.some((card) => card.front.trim() && card.back.trim());
+  studyIndex = Math.max(0, Math.min(studyIndex, cards.length - 1));
   renderStudyCard();
 }
-
-function makeEditor(card, index) {
-  const editor = document.createElement("article");
-  editor.className = "card-editor";
-
-  const number = document.createElement("span");
-  number.className = "card-number";
-  number.textContent = String(index + 1).padStart(2, "0");
-
-  const questionField = makeField("QUESTION", card.front, "question-field", (value) => {
-    cards[index].front = value;
-    renderStudyCard();
-  });
-  const answerField = makeField("ANSWER", card.back, "answer-field", (value) => {
-    cards[index].back = value;
-    renderStudyCard();
-  });
-
-  const remove = document.createElement("button");
-  remove.className = "delete-card";
-  remove.type = "button";
-  remove.title = "Delete card";
-  remove.setAttribute("aria-label", `Delete card ${index + 1}`);
-  remove.textContent = "×";
-  remove.addEventListener("click", () => {
-    cards.splice(index, 1);
-    renderCards();
-  });
-
-  editor.append(number, questionField, answerField, remove);
-  return editor;
-}
-
 function makeField(labelText, value, className, onChange) {
   const wrapper = document.createElement("label");
   wrapper.className = className;
   const label = document.createElement("span");
   label.className = "field-label";
   label.textContent = labelText;
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.addEventListener("input", () => onChange(textarea.value));
-  wrapper.append(label, textarea);
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.addEventListener("input", () => { onChange(input.value); updateDeckState(); });
+  wrapper.append(label, input);
   return wrapper;
 }
-
+function makeEditor(card, index) {
+  const editor = document.createElement("article");
+  editor.className = "card-editor";
+  const number = document.createElement("span");
+  number.className = "card-number";
+  number.textContent = String(index + 1).padStart(2, "0");
+  const question = makeField("QUESTION", card.front, "question-field", (value) => { card.front = value; });
+  const answer = makeField("ANSWER", card.back, "answer-field", (value) => { card.back = value; });
+  const remove = document.createElement("button");
+  remove.className = "delete-card";
+  remove.type = "button";
+  remove.setAttribute("aria-label", "Delete card " + (index + 1));
+  remove.textContent = "×";
+  remove.addEventListener("click", () => { cards.splice(index, 1); renderCards(); });
+  editor.append(number, question, answer, remove);
+  if (card.source) {
+    const evidence = document.createElement("details");
+    evidence.className = "evidence";
+    const label = document.createElement("summary");
+    label.textContent = "Source excerpt · compare with your edits";
+    const excerpt = document.createElement("p");
+    excerpt.textContent = card.source;
+    evidence.append(label, excerpt);
+    editor.append(evidence);
+  }
+  return editor;
+}
 function renderCards() {
   cardsContainer.replaceChildren(...cards.map(makeEditor));
   updateDeckState();
 }
-
-function renderStudyCard() {
-  if (!cards.length) return;
-  const card = cards[studyIndex];
-  studySide.textContent = showingAnswer ? "ANSWER" : "QUESTION";
-  studyText.textContent = showingAnswer ? card.back : card.front;
-  studyProgress.textContent = `${studyIndex + 1} / ${cards.length}`;
-  studyCard.classList.toggle("answer", showingAnswer);
-}
-
-async function generateCards() {
-  const notes = notesInput.value.trim();
-  if (!notes) {
-    showNotice("Paste or import notes before generating a deck.", true);
-    notesInput.focus();
-    return;
-  }
-
-  generateButton.disabled = true;
-  generateButton.firstElementChild.textContent = "Generating…";
-  showNotice("");
+async function requestJson(url, options = {}, timeout = 75000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        notes,
-        max_cards: Number(countInput.value),
-        use_ai: aiToggle.checked,
-      }),
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const data = await response.json().catch(() => ({ error: "The server returned an unreadable response. Restart it and retry." }));
+    if (!response.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("Request timed out. Your current deck is unchanged. Try fewer notes/cards.");
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+async function generateCards() {
+  if (busy) return;
+  const notes = notesInput.value.trim();
+  if (!notes) { showNotice("Paste or import notes first.", true); notesInput.focus(); return; }
+  if (!countInput.reportValidity()) return;
+  const useAI = modeInput.value === "ai";
+  setBusy(true);
+  showNotice(useAI ? "Waiting for Gemini. Notes are being sent to Google." : "Processing locally. No AI request.");
+  try {
+    const data = await requestJson("/api/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes, max_cards: Number(countInput.value), use_ai: useAI }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Generation failed.");
-    cards = data.cards || [];
+    if (!data.cards?.length) {
+      showNotice("No supported cards found. Use definitions or explicit Q/A pairs. Your existing deck is unchanged.");
+      return;
+    }
+    cards = data.cards;
     studyIndex = 0;
     showingAnswer = false;
     renderCards();
-    if (data.warning) showNotice(data.warning);
-    else if (!cards.length) showNotice("No reliable cards were found. Try adding complete sentences or enabling AI mode.");
-    else showNotice(`${cards.length} cards generated in ${data.mode === "ai" ? "AI" : "local"} mode.`);
+    reviewScroll.scrollTop = 0;
+    $("#deck-mode").textContent = data.mode === "ai" ? "Generated by Gemini · " + data.model : "Generated by local rules · no AI";
+    showNotice(data.warning || (cards.length + " cards. Review answers against your notes."));
   } catch (error) {
-    showNotice(error.message || "Could not generate cards.", true);
-  } finally {
-    generateButton.disabled = false;
-    generateButton.firstElementChild.textContent = "Generate flashcards";
-  }
+    showNotice(error.message + " Your existing deck is unchanged.", true);
+  } finally { setBusy(false); }
 }
-
-function csvEscape(value) {
-  return `"${String(value).replaceAll('"', '""')}"`;
-}
-
+function csvEscape(value) { return '"' + String(value).replaceAll('"', '""') + '"'; }
 function exportCsv() {
-  const validCards = cards.filter((card) => card.front.trim() && card.back.trim());
-  if (!validCards.length) return;
-  const rows = ["Front,Back,Type", ...validCards.map((card) => [card.front, card.back, card.card_type || "basic"].map(csvEscape).join(","))];
-  const blob = new Blob(["\ufeff" + rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+  const valid = cards.filter((card) => card.front.trim() && card.back.trim());
+  if (!valid.length) return;
+  const rows = ["Front,Back,Type", ...valid.map((card) => [card.front, card.back, card.card_type || "basic"].map(csvEscape).join(","))];
+  const url = URL.createObjectURL(new Blob(["\ufeff" + rows.join("\r\n")], { type: "text/csv;charset=utf-8" }));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `recall-flashcards-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.download = "recall-flashcards-" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (valid.length < cards.length) showNotice("Exported " + valid.length + " complete cards; skipped incomplete cards.");
 }
-
-notesInput.value = localStorage.getItem("recall-notes") || "";
-updateNoteMeta();
+try { notesInput.value = localStorage.getItem("recall-notes") || ""; } catch {}
+saveNotes();
 updateDeckState();
-notesInput.addEventListener("input", updateNoteMeta);
-countInput.addEventListener("input", () => { countValue.textContent = countInput.value; });
-sampleButton.addEventListener("click", () => { notesInput.value = sampleNotes; updateNoteMeta(); notesInput.focus(); });
+notesInput.addEventListener("input", saveNotes);
+modeInput.addEventListener("change", () => {
+  $("#mode-help").textContent = modeInput.value === "ai"
+    ? "Sends notes to Google. Requires a valid key and quota. Never silently falls back."
+    : "Pattern matching only. Nothing is sent to Google.";
+});
+$("#sample-button").addEventListener("click", () => {
+  notesInput.value = "Velocity: The rate of change of displacement.\n\nWhat is the SI unit of force? The SI unit of force is the newton.";
+  saveNotes();
+});
 generateButton.addEventListener("click", generateCards);
-exportButton.addEventListener("click", exportCsv);
-addButton.addEventListener("click", () => { cards.push({ front: "", back: "", card_type: "basic" }); renderCards(); });
-
+$("#export-button").addEventListener("click", exportCsv);
+$("#add-button").addEventListener("click", () => {
+  cards.unshift({ front: "", back: "", card_type: "basic", source: "" });
+  studyIndex = 0;
+  showingAnswer = false;
+  renderCards();
+  reviewScroll.scrollTop = 0;
+  cardsContainer.querySelector("textarea").focus({ preventScroll: true });
+  if (cards.length === 1) $("#deck-mode").textContent = "Manual deck · no AI";
+});
+$("#import-button").addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
   const [file] = fileInput.files;
-  if (!file) return;
-  notesInput.value = await file.text();
-  updateNoteMeta();
-  showNotice(`Imported ${file.name}.`);
+  if (!file || busy) return;
+  setBusy(true);
+  showNotice("Reading " + file.name + " locally…");
+  try {
+    if (file.size > 10 * 1024 * 1024) throw new Error("File exceeds the 10 MB limit.");
+    const form = new FormData();
+    form.append("file", file);
+    const data = await requestJson("/api/import", { method: "POST", body: form }, 30000);
+    notesInput.value = data.text;
+    saveNotes();
+    showNotice(data.warning || ("Imported " + file.name + ". Review the extracted text before generating."));
+  } catch (error) { showNotice(error.message, true); }
+  finally { fileInput.value = ""; setBusy(false); }
 });
-
-studyCard.addEventListener("click", () => { showingAnswer = !showingAnswer; renderStudyCard(); });
-document.querySelector("#previous-card").addEventListener("click", () => {
-  studyIndex = (studyIndex - 1 + cards.length) % cards.length;
-  showingAnswer = false;
-  renderStudyCard();
-});
-document.querySelector("#next-card").addEventListener("click", () => {
-  studyIndex = (studyIndex + 1) % cards.length;
-  showingAnswer = false;
-  renderStudyCard();
-});
-
+$("#study-card").addEventListener("click", () => { showingAnswer = !showingAnswer; renderStudyCard(); });
+for (const [selector, offset] of [["#previous-card", -1], ["#next-card", 1]]) {
+  $(selector).addEventListener("click", () => {
+    if (!cards.length) return;
+    studyIndex = (studyIndex + offset + cards.length) % cards.length;
+    showingAnswer = false;
+    renderStudyCard();
+  });
+}
 document.addEventListener("keydown", (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-    event.preventDefault();
-    generateCards();
-  }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && cards.length) {
-    event.preventDefault();
-    exportCsv();
-  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); generateCards(); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && cards.length) { event.preventDefault(); exportCsv(); }
 });
