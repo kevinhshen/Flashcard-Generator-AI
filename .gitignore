@@ -1,3 +1,24 @@
+# Secrets
+.env
+.env.*
+!.env.example
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Generated exports
 *.csv
-*.env
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
