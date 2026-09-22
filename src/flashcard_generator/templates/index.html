@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recall</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Recall home"><span class="brand-mark">R</span> Recall</a>
+    <a class="text-button" href="#study-section">Jump to check ↓</a>
+  </header>
+  <main class="page-shell">
+    <h1 class="sr-only">Recall flashcards</h1>
+    <section class="workspace" aria-label="Flashcard workspace">
+      <section class="input-panel panel" aria-labelledby="source-heading">
+        <div class="panel-heading">
+          <h2 id="source-heading"><span class="step-label">01</span> Source</h2>
+          <button id="import-button" class="secondary-button" type="button">Import TXT / MD / PDF</button>
+          <input id="notes-file" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" hidden>
+        </div>
+        <label class="sr-only" for="notes">Study notes</label>
+        <textarea id="notes" maxlength="200000" placeholder="Paste notes. Local rules recognize Term: definition and explicit question/answer pairs."></textarea>
+        <div class="textarea-meta">
+          <button id="sample-button" class="text-button" type="button">Load example</button>
+          <span id="character-count">0 characters</span>
+        </div>
+        <div class="controls">
+          <div class="control-group">
+            <label for="card-count">Card limit (optional)</label>
+            <input id="card-count" type="number" min="1" max="500" step="1" placeholder="Auto · cover the source">
+            <small>Leave blank for coverage first. A limit can leave facts uncovered; gaps are reported.</small>
+          </div>
+          <div class="control-group">
+            <label for="generation-mode">Generator</label>
+            <select id="generation-mode" aria-describedby="mode-help">
+              <option value="ai" selected>Gemini · reviewed AI{% if not ai_available %} (key required){% endif %}</option>
+              <option value="local">Local rules · limited coverage</option>
+            </select>
+            <small id="mode-help">Sends notes to Google. Inventories facts, audits omissions, drafts and reviews cards.
+              Multiple requests cost more and can take several minutes.
+              {% if not ai_available %}Add GEMINI_API_KEY to .env and restart to enable generation.{% endif %}</small>
+          </div>
+        </div>
+        <button id="generate-button" class="primary-button" type="button"><span>Generate</span><span>↵</span></button>
+        <button id="cancel-button" class="secondary-button" type="button" hidden>Cancel generation</button>
+        <p class="shortcut">Ctrl/⌘ + Enter</p>
+      </section>
+
+      <section class="output-panel panel" aria-labelledby="review-heading">
+        <div class="panel-heading">
+          <h2 id="review-heading"><span class="step-label">02</span> Review <span id="card-total" class="count-pill">0</span></h2>
+          <div class="output-actions">
+            <button id="add-button" class="secondary-button" type="button">+ Add card</button>
+            <button id="export-button" class="secondary-button" type="button" disabled>Export CSV</button>
+          </div>
+        </div>
+        <p id="deck-mode" class="deck-mode">No deck generated</p>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <details id="coverage-report" class="coverage-report" hidden>
+          <summary id="coverage-summary">Coverage report</summary>
+          <p>Counts refer to AI-identified facts, not a guarantee that every important fact was found or interpreted correctly.
+            Source excerpts are evidence for review, not proof of correctness.</p>
+          <p id="coverage-state"></p>
+          <ul id="coverage-gaps"></ul>
+        </details>
+        <div class="review-scroll" tabindex="0" role="region" aria-label="Scrollable flashcard review">
+          <div id="empty-state" class="empty-state"><p>No cards. Generate a deck or add one manually.</p></div>
+          <div id="cards" class="cards"></div>
+        </div>
+      </section>
+    </section>
+
+    <section id="study-section" class="study-section panel">
+      <div class="panel-heading">
+        <h2><span class="step-label">03</span> Check</h2>
+        <span id="study-progress">0 / 0</span>
+      </div>
+      <button id="study-card" class="study-card" type="button" disabled>
+        <span id="study-side" class="field-label">QUESTION</span>
+        <strong id="study-text">Generate or add cards to start.</strong>
+        <small>Click or press Space to flip</small>
+      </button>
+      <div class="study-nav">
+        <button id="previous-card" class="secondary-button" type="button" disabled aria-label="Previous card">← Previous</button>
+        <button id="next-card" class="secondary-button" type="button" disabled aria-label="Next card">Next →</button>
+      </div>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
