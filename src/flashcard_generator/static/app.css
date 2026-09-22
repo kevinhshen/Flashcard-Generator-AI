@@ -66,6 +66,10 @@ small { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .study-card strong { font-weight: 500; font-size: 19px; line-height: 1.5; }
 .study-card.answer { border-color: #567a9f; }
 .study-nav { display: flex; justify-content: space-between; margin-top: 12px; }
+.coverage-report { font-size: 12px; line-height: 1.5; color: var(--muted); margin-bottom: 14px; max-height: 210px; overflow: auto; }
+.coverage-report summary { color: var(--accent); cursor: pointer; }
+.coverage-report li { margin-bottom: 8px; overflow-wrap: anywhere; }
+#cancel-button { margin-top: 10px; width: 100%; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 @media (max-width: 950px) { .workspace { grid-template-columns: 1fr; } }
 @media (max-width: 550px) {

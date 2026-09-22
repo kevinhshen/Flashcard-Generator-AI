@@ -31,7 +31,7 @@ def test_generate_rejects_empty_notes(client):
 def test_local_generation_api(client):
     response = client.post(
         "/api/generate",
-        json={"notes": "Velocity: The rate of change of displacement.", "max_cards": 10},
+        json={"notes": "Velocity: The rate of change of displacement.", "max_cards": 10, "use_ai": False},
     )
     payload = response.get_json()
     assert response.status_code == 200
@@ -68,17 +68,17 @@ def test_bad_payload_is_json_error(client, payload):
 
 def test_random_input_then_valid_input(client):
     assert client.post("/api/generate", json={"notes": "asdfasdf"}).status_code == 422
-    response = client.post("/api/generate", json={"notes": "Force: A push or pull."})
+    response = client.post("/api/generate", json={"notes": "Force: A push or pull.", "use_ai": False})
     assert response.status_code == 200
     assert response.get_json()["cards"]
 
 
 def test_local_mode_never_calls_ai(client, monkeypatch):
-    def unexpected(*args):
+    def unexpected(*args, **kwargs):
         raise AssertionError("AI must not be called")
 
-    monkeypatch.setattr("flashcard_generator.web.generate_with_gemini", unexpected)
-    response = client.post("/api/generate", json={"notes": "Force: A push or pull."})
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", unexpected)
+    response = client.post("/api/generate", json={"notes": "Force: A push or pull.", "use_ai": False})
     assert response.status_code == 200
     assert response.get_json()["mode"] == "local"
 
@@ -86,11 +86,39 @@ def test_local_mode_never_calls_ai(client, monkeypatch):
 def test_ai_error_does_not_leak_or_fallback(client, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
-    def failing(*args):
+    def failing(*args, **kwargs):
         raise RuntimeError("secret-key-value")
 
-    monkeypatch.setattr("flashcard_generator.web.generate_with_gemini", failing)
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", failing)
     response = client.post("/api/generate", json={"notes": "Force: A push or pull.", "use_ai": True})
     assert response.status_code == 502
     assert b"secret-key-value" not in response.data
     assert "cards" not in response.get_json()
+
+
+def test_ai_is_default_even_without_key(client):
+    response = client.post("/api/jobs", json={"notes": "Force is a push or pull."})
+    assert response.status_code == 400
+    assert response.get_json()["error_code"] == "missing_key"
+    assert b'value="ai" selected' in client.get("/").data
+
+
+def test_ai_job_api_and_auto_card_limit(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    received = []
+
+    def generate(notes, count, **kwargs):
+        received.append((notes, count))
+        return {"cards": [], "mode": "ai", "coverage": {"identified_facts": 0}}
+
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", generate)
+    response = client.post("/api/jobs", json={"notes": "No usable study content"})
+    assert response.status_code == 202
+    key = response.get_json()["job_id"]
+    client.application.extensions["generation_jobs"].executor.shutdown(wait=True)
+    result = client.get("/api/jobs/" + key).get_json()
+    assert result["status"] == "completed"
+    assert result["result"]["mode"] == "ai"
+    assert received == [("No usable study content", None)]
+    assert client.get("/api/jobs/missing").status_code == 404
+    assert client.post("/api/jobs/missing/cancel").status_code == 404

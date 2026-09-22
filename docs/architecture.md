@@ -3,14 +3,15 @@
 The application has three deliberately separate layers:
 
 1. `generator.py` parses notes and creates deterministic cards without network access.
-2. `ai.py` optionally asks Gemini for structured cards and validates the response with Pydantic.
-3. `web.py` exposes the browser UI and JSON API while keeping the API key on the server.
+2. `ai.py` inventories and audits facts, drafts and reviews cards, and calculates traceable coverage.
+3. `web.py` exposes the UI/API and `jobs.py` runs one background job with progress and cancellation.
+   The API key stays on the server. AI is the default; local rules must be selected explicitly.
 
 ```mermaid
 flowchart TD
     A[Notes in browser] --> B{AI enabled?}
     B -- No --> C[Local parser]
-    B -- Yes --> D[Gemini structured output]
+    B -- Yes --> D[Gemini inventory and review pipeline]
     D -- API failure --> H[Explicit error; preserve deck]
     C --> E[Validate and deduplicate]
     D --> E
@@ -27,12 +28,39 @@ All local answers are copied from the source notes.
 
 ## AI generation pipeline
 
-The Gemini request uses a low temperature and a Pydantic response schema. The prompt tells the model to treat
-the notes as untrusted source text, use only facts in those notes, create atomic recall questions, and preserve
-technical notation. The response is validated, normalized, deduplicated, and capped before it reaches the UI.
+The entire input is losslessly split into sections, with neighboring context for headings. Each section gets
+an inventory request and an omission audit. Source excerpt matching tolerates whitespace differences but
+requires an exact, contiguous quote from the owned section. Unlocatable evidence is reported separately.
+The audited inventory supersedes the draft, so corrected misinterpretations cannot reappear in card prompts.
+Every removed or reworded draft objective is listed in the report for human inspection; the audit cannot
+silently discard it. Later card review must still compare interpretations against the quoted evidence.
+
+Facts have stable IDs. Batches of up to 12 facts receive separate drafting and review requests. A bounded
+repair pass targets missing IDs. Only reviewed cards are considered for deterministic validation. Unknown IDs,
+tautologies and vague pronoun questions are rejected. Exact duplicate question/answers merge evidence;
+conflicting answers to an identical question are removed and their facts become coverage gaps.
+
+Caps are applied after every section has been processed. Coverage is computed from accepted cards' fact IDs;
+it is not a semantic proof. Model errors can survive all passes, and a fact missed by both extraction calls
+will not appear in the denominator. The UI discloses this and marks counts stale after manual edits.
+
+Requests use structured Pydantic schemas, low temperature, an explicit system instruction, a 90-second timeout,
+and one transient-server-error retry. Source notes are delimited as untrusted data. This reduces but cannot
+guarantee immunity to source prompt injection. The model has no tools or filesystem access.
+
+## Background jobs
+
+`POST /api/jobs` starts generation, `GET /api/jobs/<id>` polls progress/results, and
+`POST /api/jobs/<id>/cancel` sets a cooperative cancellation flag checked between requests. One worker prevents
+unbounded paid concurrency. Finished jobs expire after 30 minutes and only ten are retained. Jobs and results
+stay in memory; the browser stores the job ID in session storage to reconnect after refresh. Restarting the
+server invalidates jobs. This is a single-process, single-user local application, not a multi-worker service.
+The synchronous `/api/generate` endpoint remains available for scripts.
 
 ## Failure behavior
 
 AI failures return an explicit error, never local cards. The UI preserves the previous deck on errors or empty
 responses. Browser notes use best-effort local storage; storage failures never prevent interaction.
 PDF text extraction is local via pypdf. Scanned pages require OCR and generate a warning or an error.
+Provider error messages are mapped to safe error codes rather than exposing raw SDK responses or secrets.
+Cancellation waits for the current request and any SDK retry; it does not forcibly terminate network I/O.
