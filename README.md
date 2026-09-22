@@ -1,20 +1,21 @@
-# Recall — self-contained local AI flashcard generator
+# Recall
 
-Recall turns notes into editable flashcards and exports CSV for Anki, Quizlet, or a spreadsheet. Its default AI
-backend is `mrm8488/t5-base-finetuned-question-generation-ap`, loaded directly in Python through Hugging Face
-Transformers. Users do not need an API key, Ollama, Docker, or a separate model server.
+Recall is a local-first web application that converts notes into editable flashcards. It combines deterministic
+text parsing with a small Hugging Face T5 model, keeps generated answers grounded in the supplied notes, and
+exports reviewed cards as CSV.
 
-## Features
+The application does not require an API key, Ollama, Docker, or a separate model server.
 
-- Imports pasted text, UTF-8 text, Markdown, and text-based PDFs up to 10 MB / 200 pages.
-- Downloads and caches the question-generation T5 model automatically the first time AI generation is used.
-- Uses an NVIDIA GPU automatically when PyTorch detects CUDA, with CPU and Apple MPS fallbacks.
-- Selects answers deterministically from exact source excerpts; the model writes only the questions.
-- Reports which bounded source units produced cards and why other units were rejected.
-- Provides a separate deterministic rules mode with no model download or inference.
-- Runs AI generation in a background job with progress, cancellation, and refresh reconnection.
-- Lets users edit, add, remove, preview, and export cards.
-- Stores draft notes in browser local storage; the Python server does not write notes to disk.
+## What it does
+
+- Accepts pasted notes and imports UTF-8 text, Markdown, and text-based PDFs.
+- Runs `mrm8488/t5-base-finetuned-question-generation-ap` inside the Python process.
+- Downloads and caches the model automatically on the first AI generation.
+- Selects card answers from exact source excerpts before asking the model to write questions.
+- Includes a deterministic rules mode that does not load a model.
+- Reports source units that failed validation instead of silently hiding them.
+- Supports background progress, cooperative cancellation, refresh reconnection, editing, study preview, and CSV
+  export.
 
 ## Quick start
 
@@ -28,22 +29,41 @@ python -m pip install -e .
 python run.py
 ```
 
-The browser opens to `http://127.0.0.1:5000`. The original `python FlashcardGenerator.py` launcher also works.
+Recall opens `http://127.0.0.1:5000`. The first AI run downloads roughly 900 MB of model files into the normal
+Hugging Face cache. Later runs reuse the cached files and can start without internet access.
 
-That is the complete setup. The Python installation includes PyTorch, Transformers, and SentencePiece. On the
-first AI generation, Transformers downloads the default checkpoint from Hugging Face and stores it in the normal
-Hugging Face cache. It is about 900 MB; later runs reuse those files. The initial download can take several
-minutes depending on the connection, and progress remains visible in the app.
-
-If PowerShell blocks virtual-environment activation, run this once in the current terminal and activate again:
+If PowerShell blocks virtual-environment activation:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-## Optional configuration
+## Basic workflow
 
-The defaults need no `.env` file. Copy `.env.example` to `.env` only to override them:
+1. Paste notes or import a supported file.
+2. Choose **T5 question model** or **Local rules**.
+3. Leave the card limit blank for source-unit coverage, or set a limit from 1 to 500.
+4. Generate the deck and inspect rejected units and source excerpts.
+5. Edit the cards, use the study preview, and export CSV.
+
+The exported columns are `Front`, `Back`, and `Type`.
+
+## How the AI path stays grounded
+
+Recall does not ask the model to invent complete cards. It first parses the notes into bounded source units and
+selects a literal answer span using labels, explicit question/answer pairs, definitions, stated facts, and
+quantities. The model receives that answer plus its source context and generates only a question.
+
+The application then rejects malformed output, non-questions, vague questions, tautologies, and duplicates. A
+source excerpt remains attached to every accepted card for human review.
+
+This limits answer hallucination, but it does not prove that every generated question is pedagogically strong or
+that every fact was identified. The coverage report measures validated source units, not complete semantic fact
+coverage.
+
+## Configuration
+
+The defaults need no `.env` file. Copy `.env.example` to `.env` only when overriding them:
 
 ```dotenv
 HF_MODEL_ID=mrm8488/t5-base-finetuned-question-generation-ap
@@ -52,105 +72,60 @@ HOST=127.0.0.1
 PORT=5000
 ```
 
-`HF_DEVICE` accepts `auto`, `cpu`, `cuda`, or `mps`. `auto` prefers CUDA, then Apple MPS, then CPU. `HF_MODEL_ID`
-is an advanced override: replacements must support the T5 `answer: ... context: ...` question-generation format.
+`HF_DEVICE=auto` prefers CUDA, then Apple MPS, then CPU. A replacement `HF_MODEL_ID` must support the T5
+`answer: ... context: ...` question-generation format.
 
-## Using Recall
+## Project map
 
-1. Paste notes or import a supported file.
-2. Leave the card limit blank to process every bounded source unit, or choose a cap from 1–500.
-3. Keep **T5 question model · local AI** selected, or choose **Local rules** for fast deterministic parsing.
-4. Generate and leave the app open while the first-use model download and inference finish.
-5. Inspect rejected units and source excerpts, edit cards, and export CSV.
+| Path | Responsibility |
+|---|---|
+| `run.py` | Primary launcher |
+| `FlashcardGenerator.py` | Compatibility launcher for earlier shortcuts |
+| `src/flashcard_generator/web.py` | Flask application, validation, and HTTP routes |
+| `src/flashcard_generator/ai.py` | Source units, answer selection, model lifecycle, and AI validation |
+| `src/flashcard_generator/generator.py` | Deterministic rules generator and shared parsing helpers |
+| `src/flashcard_generator/importers.py` | Bounded TXT, Markdown, and PDF extraction |
+| `src/flashcard_generator/jobs.py` | In-memory background job lifecycle |
+| `src/flashcard_generator/templates/` | HTML structure |
+| `src/flashcard_generator/static/` | Browser behavior and styling |
+| `tests/` | Python and browser regressions |
 
-The CSV has `Front`, `Back`, and `Type` columns. Map `Front` and `Back` to the corresponding Anki fields.
-
-## How local AI generation works
-
-1. Parse labelled blocks, normal sentences, and explicit question/answer pairs.
-2. Split long material into source units of at most 420 characters to stay inside T5's bounded context.
-3. Select a literal answer span using question/answer, label, definition, and quantity structure.
-4. Ask the fine-tuned T5 model to write one question for that answer and context.
-5. Reject malformed output, non-questions, tautologies, vague questions, and duplicates.
-6. Apply the optional card cap only after every source unit has been attempted.
-
-This is deliberately different from a large chat-model pipeline. Live testing showed that general-purpose
-FLAN-T5 Base often ignored the requested card format or generated the wrong question. The default checkpoint is
-similar in size but fine-tuned for answer-aware question generation. Keeping answers outside the model prevents
-invented back sides while short prompts and deterministic validation fit the model's actual capabilities.
-
-Source-unit coverage is not fact coverage. A sentence can contain several facts, the parser can choose an
-imperfect boundary, and a small model can generate a weak question even when the answer is a valid quote. Review
-the deck before relying on it for high-stakes material.
-
-## Local rules mode
-
-Rules mode recognizes labelled sections, explicit question/answer pairs, common definitions, and numerical
-quantities with units. It is fast and deterministic, but it does not use T5. Every answer is copied from
-the source.
+For implementation details, read [Architecture](docs/architecture.md). For a complete project walkthrough and
+interview questions, read [Interview guide](docs/interview-guide.md).
 
 ## Development
 
 ```powershell
 python -m pip install -e ".[dev]"
+ruff format --check .
 ruff check .
 pytest --cov=flashcard_generator --cov-report=term-missing
 npm ci
 npm test
 ```
 
-Unit tests inject a scripted model provider, so CI does not download model weights. They validate source
-partitioning, grounding, failure handling, cancellation, API behavior, and the interface. A separate live smoke
-test is needed to assess actual model quality.
-
-Project layout:
-
-```text
-src/flashcard_generator/
-├── ai.py             # Lazy T5 loading, answer selection, question generation, and validation
-├── generator.py      # Deterministic rules generator
-├── importers.py      # TXT, Markdown, and PDF extraction
-├── jobs.py           # Background progress and cancellation
-├── web.py            # Flask routes and launcher
-├── templates/        # Interface markup
-└── static/           # Interface CSS and JavaScript
-```
-
-## API
-
-`POST /api/generate` accepts:
-
-```json
-{"notes": "Velocity: rate of change of displacement.", "max_cards": null, "use_ai": true}
-```
-
-For AI generation, prefer `POST /api/jobs`, then poll `GET /api/jobs/<job_id>`. Cancel with
-`POST /api/jobs/<job_id>/cancel`. `GET /api/status` reports dependency, model-cache, and in-memory load status
-without initiating a download.
-
-## Troubleshooting
-
-**First generation appears slow:** The model is downloading and loading. Keep the app open. Later runs reuse the
-cache and the loaded process memory.
-
-**Model setup failed:** Confirm internet access and adequate free disk space, then retry. Corporate or campus
-networks may block Hugging Face downloads.
-
-**CUDA out of memory:** Set `HF_DEVICE=cpu`, restart Recall, and try fewer or shorter notes.
-
-**Generation is slow on CPU:** Reduce the input or keep the app process running so the model does not need to
-reload. Each bounded source unit requires one inference pass.
-
-**Port 5000 is occupied:** Set `PORT=5050` in `.env` and restart Recall.
-
-**PDF content is missing:** Scanned pages, diagrams, handwriting, and complex mathematical layout need OCR and
-are not supported. Review extracted text before generating.
+The automated tests use a scripted provider, so CI does not download model weights. Live-model quality is
+checked separately with a smoke test.
 
 ## Limits
 
-- The first AI run requires internet access to download model files.
-- Local inference speed depends on CPU/GPU and note length.
-- Generated questions still require human review.
+- First-time AI setup needs internet access and sufficient disk space.
+- CPU inference speed depends on note length and hardware.
+- Scanned PDFs, handwriting, diagrams, and complex visual layouts require OCR and are not interpreted.
 - Jobs live in one Python process and disappear when the server restarts.
-- Cancellation takes effect after the current model pass returns.
-- The app is intended for one local user and has no accounts or shared decks.
+- Cancellation takes effect between inference passes, not in the middle of a PyTorch operation.
+- The current architecture is intended for one local user, not a multi-user deployment.
+
+## Troubleshooting
+
+**First generation is slow:** the model is downloading or loading. Keep the application open; later runs reuse
+the cache and the loaded runtime.
+
+**Model setup fails:** confirm internet access and free disk space. Campus or corporate networks may block
+Hugging Face downloads.
+
+**CUDA runs out of memory:** set `HF_DEVICE=cpu`, restart Recall, and use a smaller input.
+
+**Port 5000 is occupied:** set another `PORT` in `.env`, such as `5050`.
+
+**PDF text is missing:** the PDF likely contains scanned images instead of embedded text. Run OCR before import.

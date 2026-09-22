@@ -66,8 +66,7 @@ def _model_is_cached(configured_model: str) -> bool:
 
         required = ("config.json", "tokenizer_config.json", "spiece.model")
         files_ready = all(
-            isinstance(try_to_load_from_cache(configured_model, filename), str)
-            for filename in required
+            isinstance(try_to_load_from_cache(configured_model, filename), str) for filename in required
         )
         weights_ready = any(
             isinstance(try_to_load_from_cache(configured_model, filename), str)
@@ -164,19 +163,14 @@ def source_units(notes: str) -> list[SourceUnit]:
     useful = [
         (segment, answer)
         for segment, answer in segments
-        if len(segment.split()) >= 3
-        and answer
-        and any(character.isalpha() for character in segment)
+        if len(segment.split()) >= 3 and answer and any(character.isalpha() for character in segment)
     ]
     if len(useful) > MAX_SOURCE_UNITS:
         raise AIError(
             "too_many_units",
             f"The notes contain over {MAX_SOURCE_UNITS} source units. Split them into smaller files.",
         )
-    return [
-        SourceUnit(f"U{index}", text, index, answer)
-        for index, (text, answer) in enumerate(useful, 1)
-    ]
+    return [SourceUnit(f"U{index}", text, index, answer) for index, (text, answer) in enumerate(useful, 1)]
 
 
 def _answer_span(text: str) -> str:
@@ -375,9 +369,7 @@ def generate_deck(
                 raise Cancelled()
             card, reason = parse_model_response(raw, unit)
             if card is None:
-                uncovered.append(
-                    {"id": unit.id, "text": unit.text, "source": unit.text, "reason": reason}
-                )
+                uncovered.append({"id": unit.id, "text": unit.text, "source": unit.text, "reason": reason})
                 continue
             key = (card["front"].casefold(), card["back"].casefold())
             if key in seen:

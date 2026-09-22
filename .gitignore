@@ -11,10 +11,14 @@ __pycache__/
 .ruff_cache/
 node_modules/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .venv/
 venv/
 env/
+build/
+dist/
 
 # Generated exports
 *.csv

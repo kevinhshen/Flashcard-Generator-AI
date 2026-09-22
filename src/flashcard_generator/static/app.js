@@ -288,7 +288,7 @@ $("#cancel-button").addEventListener("click", async () => {
     showNotice(error.message, true);
   }
 });
-// Refresh can reconnect to an active job without issuing another paid request.
+// Refresh can reconnect to an active job without starting duplicate inference.
 try { jobId = sessionStorage.getItem("recall-job"); } catch {}
 if (jobId) {
   setBusy(true);
