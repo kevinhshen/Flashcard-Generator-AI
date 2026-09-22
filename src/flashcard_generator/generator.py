@@ -17,6 +17,7 @@ class Flashcard:
     front: str
     back: str
     card_type: str = "basic"
+    source: str = ""
 
     def to_dict(self) -> dict[str, str]:
         return asdict(self)
@@ -28,16 +29,19 @@ _DEFINITION_PATTERNS = (
     re.compile(r"^(.+?)\s+(?:refers to|is defined as|means)\s+(.+)$", re.IGNORECASE),
 )
 _QUESTION_STARTERS = (
-    "what", "who", "where", "when", "why", "how", "which",
-    "define", "explain", "describe", "list",
+    "what",
+    "who",
+    "where",
+    "when",
+    "why",
+    "how",
+    "which",
+    "define",
+    "explain",
+    "describe",
+    "list",
 )
 _ABBREVIATIONS = ("e.g.", "i.e.", "Dr.", "Mr.", "Mrs.", "Ms.", "vs.")
-_STOP_WORDS = {
-    "about", "after", "also", "among", "because", "before", "being",
-    "between", "could", "every", "first", "from", "have", "into",
-    "other", "should", "their", "there", "these", "those", "through",
-    "using", "which", "while", "would",
-}
 
 
 def clean_text(text: str) -> str:
@@ -46,7 +50,7 @@ def clean_text(text: str) -> str:
     lines = [re.sub(r"[\t ]+", " ", line).strip() for line in text.split("\n")]
     normalized = "\n".join(lines)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
-    normalized = re.sub(r"\s+([,.;!?])", r"\1", normalized)
+    normalized = re.sub(r"[\t ]+([,.;!?])", r"\1", normalized)
     return normalized.strip()
 
 
@@ -85,11 +89,13 @@ def parse_blocks(text: str) -> list[dict[str, str]]:
     def flush_label() -> None:
         nonlocal current_label
         if current_label is not None:
-            blocks.append({
-                "type": "labeled",
-                "label": current_label,
-                "content": " ".join(current_content).strip(),
-            })
+            blocks.append(
+                {
+                    "type": "labeled",
+                    "label": current_label,
+                    "content": " ".join(current_content).strip(),
+                }
+            )
             current_label = None
             current_content.clear()
 
@@ -127,7 +133,9 @@ def _definition_card(sentence: str) -> Flashcard | None:
         if match:
             subject, definition = (part.strip() for part in match.groups())
             if 1 <= len(subject.split()) <= 12 and definition:
-                return Flashcard(front=f"What is {subject}?", back=definition)
+                if subject.lower() in {"it", "this", "that", "these", "they", "there"}:
+                    return None
+                return Flashcard(front=f"Define {subject}.", back=definition, source=sentence)
     return None
 
 
@@ -137,21 +145,20 @@ def _cloze_card(sentence: str) -> Flashcard | None:
     if len(sentence.split()) < 5:
         return None
 
-    quantity = re.search(r"\b\d+(?:\.\d+)?(?:\s?(?:%|[A-Za-z]{1,12}))?\b", sentence)
-    capitalized = re.search(r"(?<!^)(?<![.!?]\s)\b[A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+)*\b", sentence)
-    candidates = re.findall(r"\b[A-Za-z][A-Za-z-]{5,}\b", sentence)
-    candidates = [word for word in candidates if word.lower() not in _STOP_WORDS]
-
-    answer = quantity.group(0) if quantity else capitalized.group(0) if capitalized else None
-    if answer is None and candidates:
-        answer = max(candidates, key=len)
-    if not answer:
+    # Do not blank an arbitrary long word. Only a numeric quantity with an
+    # explicit, recognized unit is conservative enough for rule-based cloze.
+    quantity = re.search(
+        r"(?<![\w.])[-+]?\d+(?:\.\d+)?\s*"
+        r"(?:degrees(?:\s+[CF]| Celsius| Fahrenheit)?|°[CF]|%|m/s(?:²|2)?|"
+        r"kg|mg|km|cm|mm|Hz|kHz|MHz|GHz|ms|seconds|minutes|hours|m|s|N|V|A|W|J|K)"
+        r"(?!\w)",
+        sentence,
+    )
+    if not quantity:
         return None
-
-    front = sentence.replace(answer, "_____", 1)
-    if front == sentence:
-        return None
-    return Flashcard(front=f"Complete: {front}", back=answer, card_type="cloze")
+    answer = quantity.group(0)
+    front = sentence[: quantity.start()] + "_____" + sentence[quantity.end() :]
+    return Flashcard(front=f"Complete: {front}", back=answer, card_type="cloze", source=sentence)
 
 
 def deduplicate(cards: Iterable[Flashcard]) -> list[Flashcard]:
@@ -172,13 +179,19 @@ def generate_local(notes: str, max_cards: int = 20) -> list[Flashcard]:
     """Generate up to ``max_cards`` deterministic cards from ``notes``."""
     if not notes or not notes.strip():
         return []
-    max_cards = max(1, min(int(max_cards), 100))
+    max_cards = max(1, min(int(max_cards), 500))
     cards: list[Flashcard] = []
 
     for block in parse_blocks(notes):
         if block["type"] == "labeled":
-            if block["content"]:
-                cards.append(Flashcard(front=f"What is {block['label']}?", back=block["content"]))
+            if 2 <= len(block["content"].split()) <= 60:
+                cards.append(
+                    Flashcard(
+                        front=f"What is {block['label']}?",
+                        back=block["content"],
+                        source=f"{block['label']}: {block['content']}",
+                    )
+                )
             continue
 
         sentences = split_sentences(block["content"])
@@ -191,7 +204,13 @@ def generate_local(notes: str, max_cards: int = 20) -> list[Flashcard]:
                 and not _is_question(sentences[index + 1])
             )
             if has_following_answer:
-                cards.append(Flashcard(front=sentence, back=sentences[index + 1].rstrip(".")))
+                cards.append(
+                    Flashcard(
+                        front=sentence,
+                        back=sentences[index + 1].rstrip("."),
+                        source=sentence + " " + sentences[index + 1],
+                    )
+                )
                 index += 2
                 continue
             if not _is_question(sentence):
