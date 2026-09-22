@@ -122,7 +122,7 @@ def test_local_ai_is_default_and_needs_no_api_key(client):
     page = client.get("/").data
     assert b'value="ai" selected' in page
     assert b"T5 question model" in page
-    assert b"GEMINI_API_KEY" not in page
+    assert b"API key" not in page
 
 
 def test_ai_job_api_and_auto_card_limit(client, monkeypatch):
