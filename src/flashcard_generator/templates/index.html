@@ -28,20 +28,23 @@
         </div>
         <div class="controls">
           <div class="control-group">
-            <label for="card-count">Maximum cards</label>
-            <input id="card-count" type="number" min="1" max="500" step="1" value="30">
-            <small>1–500. An upper bound, not a quota; fewer cards may be justified.</small>
+            <label for="card-count">Card limit (optional)</label>
+            <input id="card-count" type="number" min="1" max="500" step="1" placeholder="Auto · cover the source">
+            <small>Leave blank for coverage first. A limit can leave facts uncovered; gaps are reported.</small>
           </div>
           <div class="control-group">
             <label for="generation-mode">Generator</label>
             <select id="generation-mode" aria-describedby="mode-help">
-              <option value="local">Local rules · no AI</option>
-              <option value="ai" {% if not ai_available %}disabled{% endif %}>Gemini · cloud AI{% if not ai_available %} (key required){% endif %}</option>
+              <option value="ai" selected>Gemini · reviewed AI{% if not ai_available %} (key required){% endif %}</option>
+              <option value="local">Local rules · limited coverage</option>
             </select>
-            <small id="mode-help">Pattern matching only. Nothing is sent to Google.</small>
+            <small id="mode-help">Sends notes to Google. Inventories facts, audits omissions, drafts and reviews cards.
+              Multiple requests cost more and can take several minutes.
+              {% if not ai_available %}Add GEMINI_API_KEY to .env and restart to enable generation.{% endif %}</small>
           </div>
         </div>
         <button id="generate-button" class="primary-button" type="button"><span>Generate</span><span>↵</span></button>
+        <button id="cancel-button" class="secondary-button" type="button" hidden>Cancel generation</button>
         <p class="shortcut">Ctrl/⌘ + Enter</p>
       </section>
 
@@ -55,6 +58,13 @@
         </div>
         <p id="deck-mode" class="deck-mode">No deck generated</p>
         <div id="notice" class="notice" role="status" hidden></div>
+        <details id="coverage-report" class="coverage-report" hidden>
+          <summary id="coverage-summary">Coverage report</summary>
+          <p>Counts refer to AI-identified facts, not a guarantee that every important fact was found or interpreted correctly.
+            Source excerpts are evidence for review, not proof of correctness.</p>
+          <p id="coverage-state"></p>
+          <ul id="coverage-gaps"></ul>
+        </details>
         <div class="review-scroll" tabindex="0" role="region" aria-label="Scrollable flashcard review">
           <div id="empty-state" class="empty-state"><p>No cards. Generate a deck or add one manually.</p></div>
           <div id="cards" class="cards"></div>
