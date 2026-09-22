@@ -35,7 +35,7 @@ test("no promotional headline; review scroll is independent; check always reacha
 
 test("AI defaults on, auto count, async results and coverage become stale after edits", async () => {
   const requests = [];
-  const coverage = {identified_facts:2,covered_facts:1,sections_processed:1,sections_total:1,requests:5,
+  const coverage = {identified_units:2,covered_units:1,sections_processed:2,sections_total:2,requests:2,
     uncovered:[{text:"Pointer size",reason:"Review failed"}]};
   const {dom,window,$} = app({local:false,fetch:async (url,options) => {
     requests.push({url,body:options.body});
@@ -49,7 +49,7 @@ test("AI defaults on, auto count, async results and coverage become stale after 
   assert.equal(JSON.parse(requests[0].body).max_cards, null);
   assert.equal(requests[1].url, "/api/jobs/test");
   assert.equal($("#coverage-report").hidden, false);
-  assert.match($("#coverage-summary").textContent, /1 \/ 2 identified facts/);
+  assert.match($("#coverage-summary").textContent, /1 \/ 2 source units/);
   assert.match($("#coverage-gaps").textContent, /Pointer size/);
   assert.equal(window.sessionStorage.getItem("recall-job"), null);
   $(".answer-field textarea").dispatchEvent(new window.Event("input"));
@@ -60,13 +60,13 @@ test("AI defaults on, auto count, async results and coverage become stale after 
 
 test("failed local AI job preserves old deck and clearly reports failure", async () => {
   const {dom,$} = app({local:false,fetch:async url => ({ok:true,json:async()=>url === "/api/jobs"
-    ? {job_id:"failed"} : {status:"failed",error:"Could not reach Ollama. Start Ollama."}})});
+    ? {job_id:"failed"} : {status:"failed",error:"Could not download or load the Hugging Face model."}})});
   $("#add-button").click();
   $("#notes").value = "Force is a push or pull.";
   $("#generate-button").click();
   await tick();
   assert.equal($("#card-total").textContent, "1");
-  assert.match($("#notice").textContent, /Ollama.*earlier notes/);
+  assert.match($("#notice").textContent, /Hugging Face.*earlier notes/);
   assert.equal($("#generate-button").disabled, false);
   assert.equal($("#cancel-button").hidden, true);
   dom.window.close();
@@ -124,11 +124,11 @@ test("invalid input and empty results preserve deck; valid generation works afte
   $("#generate-button").click();
   await tick();
   assert.equal($("#card-total").textContent, "1");
-  response = {cards:[card],mode:"ai",model:"test-model"};
+  response = {cards:[card],mode:"ai",model:"test-model",device:"cpu"};
   $("#notes").value = "Force is a push or pull.";
   $("#generate-button").click();
   await tick();
-  assert.match($("#deck-mode").textContent, /Ollama.*test-model/);
+  assert.match($("#deck-mode").textContent, /T5.*test-model.*cpu/);
   assert.equal($("#generate-button").disabled, false);
   dom.window.close();
 });

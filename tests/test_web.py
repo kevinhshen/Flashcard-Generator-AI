@@ -6,8 +6,14 @@ from flashcard_generator.web import create_app
 @pytest.fixture()
 def client(monkeypatch):
     monkeypatch.setattr(
-        "flashcard_generator.web.ollama_status",
-        lambda: {"available": False, "model": "qwen3:8b", "model_installed": False},
+        "flashcard_generator.web.model_status",
+        lambda: {
+            "available": True,
+            "model": "mrm8488/t5-base-finetuned-question-generation-ap",
+            "model_cached": False,
+            "model_loaded": False,
+            "automatic_download": True,
+        },
     )
     app = create_app()
     app.config.update(TESTING=True)
@@ -21,10 +27,16 @@ def test_home_page_loads(client):
     assert b"Recall flashcards" in response.data
 
 
-def test_status_reports_ollama_readiness(client):
+def test_status_reports_automatic_model_readiness(client):
     assert client.get("/api/status").get_json() == {
         "ok": True,
-        "ai": {"available": False, "model": "qwen3:8b", "model_installed": False},
+        "ai": {
+            "available": True,
+            "model": "mrm8488/t5-base-finetuned-question-generation-ap",
+            "model_cached": False,
+            "model_loaded": False,
+            "automatic_download": True,
+        },
     }
 
 
@@ -45,11 +57,11 @@ def test_local_generation_api(client):
     assert payload["cards"][0]["front"] == "What is Velocity?"
 
 
-def test_ollama_failure_never_silently_falls_back(client, monkeypatch):
+def test_model_setup_failure_never_silently_falls_back(client, monkeypatch):
     def failing(*_args, **_kwargs):
         from flashcard_generator.ai import AIError
 
-        raise AIError("service_unavailable", "Could not reach Ollama. Start Ollama.")
+        raise AIError("model_setup_failed", "Could not download or load the Hugging Face model.")
 
     monkeypatch.setattr("flashcard_generator.web.generate_deck", failing)
     response = client.post(
@@ -58,7 +70,7 @@ def test_ollama_failure_never_silently_falls_back(client, monkeypatch):
     )
     payload = response.get_json()
     assert response.status_code == 502
-    assert "Could not reach Ollama" in payload["error"]
+    assert "Could not download or load" in payload["error"]
     assert "cards" not in payload
 
 
@@ -109,7 +121,7 @@ def test_ai_error_does_not_leak_or_fallback(client, monkeypatch):
 def test_local_ai_is_default_and_needs_no_api_key(client):
     page = client.get("/").data
     assert b'value="ai" selected' in page
-    assert b"Ollama" in page
+    assert b"T5 question model" in page
     assert b"GEMINI_API_KEY" not in page
 
 

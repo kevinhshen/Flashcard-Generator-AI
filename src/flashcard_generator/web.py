@@ -9,7 +9,7 @@ import webbrowser
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
-from .ai import generate_deck, ollama_status, safe_ai_error
+from .ai import generate_deck, model_status, safe_ai_error
 from .generator import generate_local
 from .importers import MAX_FILE_BYTES, MAX_TEXT_CHARS, extract_notes
 from .jobs import JobStore
@@ -32,7 +32,7 @@ def create_app() -> Flask:
 
     @app.get("/api/status")
     def status():
-        return jsonify({"ok": True, "ai": ollama_status()})
+        return jsonify({"ok": True, "ai": model_status()})
 
     @app.post("/api/import")
     def import_file():
