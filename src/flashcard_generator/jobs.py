@@ -83,5 +83,5 @@ class JobStore:
                 return False
             job["cancel"].set()
             if job["status"] in {"queued", "running"}:
-                job["progress"] = "Cancelling after the current provider request…"
+                job["progress"] = "Cancelling after the current model request…"
             return True

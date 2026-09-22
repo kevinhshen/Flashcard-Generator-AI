@@ -1,274 +1,180 @@
-# Recall — AI Flashcard Generator
+# Recall — local AI flashcard generator
 
-Recall turns class notes into editable flashcards and exports them as a CSV that can be imported into Anki,
-Quizlet, or a spreadsheet. Gemini AI is selected by default and builds a source fact inventory, checks for
-omissions, drafts questions, and reviews their answers. Offline pattern matching is available separately.
+Recall turns notes into editable flashcards and exports CSV for Anki, Quizlet, or a spreadsheet. Its default
+AI pipeline runs locally through Ollama: it inventories source facts, audits omissions, drafts cards, reviews
+them, and reports unresolved coverage. No API key or cloud model is required.
 
-The app runs on your computer. Starting it opens the interface automatically in your default browser.
+## What it does
 
-## Features
-
-- Paste notes or import UTF-8 text, Markdown, or a text-based PDF (up to 10 MB / 200 pages).
-- Generate cards locally with no account, API key, or internet connection.
-- AI generation includes separate fact extraction, omission audit, drafting, review, and coverage repair.
-- See progress, cancel long jobs, and reconnect after a page refresh.
-- Edit, add, delete, and preview cards before export.
-- Export UTF-8 CSV with `Front`, `Back`, and `Type` columns.
-- Explicit Local rules / Gemini modes; AI errors never silently switch generators.
-- Independent review scrolling, focused top-insert for new cards, and source excerpts.
-- Leave the card limit blank for automatic source coverage (up to 1,000 AI cards), or set a cap of 1–500.
-- Inspect a coverage report listing unresolved facts, unverifiable evidence, and excluded material.
-- Preserve unfinished notes in browser local storage.
-- Validate and deduplicate generated cards.
-- Run automated tests and lint checks in GitHub Actions.
+- Imports pasted text, UTF-8 text, Markdown, and text-based PDFs up to 10 MB / 200 pages.
+- Runs reviewed AI generation locally through Ollama, with `qwen3:8b` as the default model.
+- Provides a separate deterministic rules mode that never invokes a language model.
+- Grounds cards in source excerpts and rejects unknown fact IDs, tautologies, and conflicting answers.
+- Reports identified, covered, unresolved, rejected, and excluded material.
+- Runs generation in a background job with progress, cancellation, refresh reconnection, and duplicate-job
+  protection.
+- Lets you edit, add, remove, preview, and export cards.
+- Keeps notes in browser local storage; the Python server does not write them to disk.
 
 ## Quick start
 
-### 1. Install Python
+### 1. Install Ollama and a model
 
-Install Python 3.10 or newer. Verify the installation:
+Install [Ollama for Windows](https://ollama.com/download/windows). Ollama runs in the background and serves its
+local API at `http://127.0.0.1:11434`.
 
-```bash
-python --version
+Pull the default model:
+
+```powershell
+ollama pull qwen3:8b
 ```
 
-On Windows, use `py` instead of `python` in the commands below if that is how Python is installed.
+`qwen3:8b` is about 5.2 GB and is a sensible default for an 8 GB GPU. If memory or speed is a problem, use the
+smaller model:
 
-### 2. Create and activate a virtual environment
+```powershell
+ollama pull qwen3:4b
+```
 
-Windows PowerShell:
+Then set `OLLAMA_MODEL=qwen3:4b` in `.env`.
+
+### 2. Install Recall
+
+Python 3.10 or newer is required.
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-macOS or Linux:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install the application
-
-```bash
 python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-### 4. Start Recall
+If PowerShell blocks activation, run this once in the current terminal and activate again:
 
-```bash
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+### 3. Configure and start
+
+The defaults work with a standard local Ollama installation. Copy `.env.example` to `.env` only if you want to
+change the model, endpoint, timeout, port, or model keep-alive period.
+
+```powershell
+Copy-Item .env.example .env
 python run.py
 ```
 
-Your browser should open to `http://127.0.0.1:5000`. If it does not, open that address manually. Stop the server
-with `Ctrl+C` in the terminal.
+The app opens `http://127.0.0.1:5000`. The legacy `python FlashcardGenerator.py` launcher also works.
 
-The original launcher still works for compatibility:
-
-```bash
-python FlashcardGenerator.py
-```
-
-## Gemini setup (default generator)
-
-The default **Gemini · reviewed AI** generator requires a key. To configure it:
-
-1. Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Copy `.env.example` to a new file named `.env`.
-3. Put the key after `GEMINI_API_KEY=` in `.env`.
-4. Restart the app.
-
-Example `.env`:
+## Configuration
 
 ```dotenv
-GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-2.5-flash
+OLLAMA_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen3:8b
+OLLAMA_TIMEOUT=300
+OLLAMA_KEEP_ALIVE=10m
 HOST=127.0.0.1
 PORT=5000
 ```
 
-Never commit `.env`. It is ignored by Git. The key stays on the Python server and is not sent to browser
-JavaScript. AI mode sends the pasted notes to the Gemini API; local mode does not.
-
-For offline use without a key, explicitly select **Local rules**. That mode is deterministic pattern matching,
-not a locally deployed language model. No Hugging Face model is bundled. The app running on localhost does not
-make Gemini local: its inference happens on Google's servers.
-
-Generation makes multiple model calls and may consume paid quota. Roughly two calls read/audit each source
-section and two draft/review each batch of up to 12 facts, plus one repair call per batch with missing coverage.
-Transient server errors may retry once. Long notes can take several minutes; progress shows the current step.
+Recall sends prompts only to `OLLAMA_URL`. With the default loopback address, notes stay on this computer. If
+you deliberately point `OLLAMA_URL` at another machine, your notes are transmitted to that server.
 
 ## Using the app
 
-1. Paste notes or choose **Import file**.
-2. Leave **Card limit** blank to cover the source, or set a deliberate cap.
-3. Keep Gemini selected for AI review, or explicitly choose Local rules for offline pattern matching.
-4. Choose **Generate** or press `Ctrl/⌘ + Enter`. Follow progress; use **Cancel** to stop between model calls.
-5. Inspect the coverage report and source excerpts, then correct or refine cards in the review panel.
-6. Use the preview to check whether each question is answerable without seeing the back.
-7. Choose **Export CSV**. `Ctrl/⌘ + S` also exports while a deck exists.
+1. Paste notes or import a supported file.
+2. Leave the card limit blank to cover the source, or choose a cap from 1–500.
+3. Keep **Ollama · local reviewed AI** selected, or choose **Local rules** for fast deterministic parsing.
+4. Generate, follow progress, and inspect both the cards and coverage report.
+5. Correct cards as needed and export CSV.
 
-Headings formatted as `Term: explanation` produce reliable definition cards in local mode. Complete sentences and
-explicit question/answer pairs also work well.
+The CSV has `Front`, `Back`, and `Type` columns. Map `Front` and `Back` to the corresponding Anki fields.
 
-## CSV import
+## How AI generation works
 
-The exported file contains a header row:
+1. Losslessly split the source into sections of at most 6,000 characters.
+2. Inventory independently testable facts, then run a separate omission audit.
+3. Draft cards in batches of at most 12 facts.
+4. Review each batch for unsupported claims, answer leakage, vague subjects, and missing qualifiers.
+5. Run one bounded repair pass for uncovered fact IDs.
+6. Validate provenance, merge exact duplicates, remove conflicting answers, then apply the optional card cap.
 
-```csv
-Front,Back,Type
-```
+Ollama's structured-output API receives a Pydantic JSON schema for every pass. Recall validates the returned
+JSON again before using it. Source matching confirms that an evidence excerpt exists in the notes; it does not
+prove the model interpreted that excerpt correctly. Review generated cards before relying on them.
 
-When importing into Anki, map `Front` to the front field and `Back` to the back field. The `Type` column records
-whether Recall produced a `basic` or `cloze` card; it can be ignored if your target app does not use it.
+The pipeline makes at least four local model calls for one source section and may make more for extra sections,
+batches, or repairs. A small model is faster but may miss facts or produce weaker cards. A larger model can be
+more accurate but needs more VRAM/RAM and time.
 
-## How generation works
+## Local rules mode
 
-### Local mode
-
-The local generator groups labelled sections and paragraphs, pairs questions with following answers, recognizes
-common definition patterns, and makes cloze cards only for recognized numerical quantities with units.
-It skips uncertain prose instead of blanking arbitrary words. It does not call
-an external service, and every answer is copied from the notes.
-
-### Gemini mode
-
-1. Partition the entire source into sections of at most 6,000 characters without dropping any characters.
-   Adjacent context helps resolve headings; evidence must occur in the section being processed.
-2. Extract independently testable facts with exact source excerpts. A separate audit checks for missed
-   definitions, formulas, units, conditions, exceptions, comparisons, processes, and worked examples.
-3. Draft focused question/answer cards in batches of at most 12 facts. Each card identifies the facts it tests.
-4. Review every batch for unsupported claims, logical errors, answer leakage, vague subjects, missing qualifiers,
-   and questions whose answers do not match. Request a targeted repair for uncovered facts.
-5. Validate source excerpts and fact IDs, reject empty/tautological cards, merge exact duplicates, and reject
-   conflicting answers to identical questions. Apply any card limit only after processing all source sections.
-6. Report covered and uncovered objectives, unverifiable excerpts, and reasons for exclusions.
-
-Coverage means **AI-identified facts represented by accepted cards**, not proof that all important source
-information was found or correctly understood. Source matching verifies an excerpt's presence, not logical
-entailment. The same model performs extraction and review, so correlated errors are possible. Compare the cards
-with your notes. Coverage becomes marked stale after you edit, add, or delete cards.
-
-The default model remains configurable through `GEMINI_MODEL`. No live model-quality benchmark is claimed:
-automated tests use scripted model responses to verify pipeline behavior, not real-model factual accuracy.
-
-The UI polls a background job rather than holding a connection open for the entire generation. A provider
-request has a 90-second timeout and up to one retry for transient server errors. Cancellation takes effect
-after the in-flight call/retry returns. API failures are classified (key, quota, model, timeout, invalid output)
-and never silently switch to local generation. Old cards remain visible after errors/empty results, with a
-notice that they may belong to earlier notes. Completed jobs are retained in server memory for up to 30 minutes
-(at most ten completed jobs); restarting the server loses them. Export decks you want to keep.
-
-### PDF import
-
-PDF text is extracted locally with pypdf and placed in the editable notes field before generation.
-Image-only/scanned PDFs require OCR and are not supported yet. Mixed PDFs show a warning for pages without
-extractable text. Diagrams, handwriting, mathematical layout, and reading order are not reliably recovered.
-Password-protected, malformed, oversized, and empty files show errors without replacing your notes.
-
-See [docs/architecture.md](docs/architecture.md) for the data flow and failure behavior.
-
-## Project structure
-
-```text
-.
-├── run.py                         # Recommended launcher
-├── FlashcardGenerator.py          # Backward-compatible launcher
-├── src/flashcard_generator/
-│   ├── generator.py               # Offline parsing and card generation
-│   ├── ai.py                      # Fact inventory, review, and coverage pipeline
-│   ├── jobs.py                    # Background progress and cancellation
-│   ├── importers.py               # Local text/Markdown/PDF extraction
-│   ├── web.py                     # Flask routes and browser launcher
-│   ├── templates/index.html       # Accessible interface markup
-│   └── static/                    # UI styles and interactions
-├── tests/                         # Generator and API tests
-├── examples/                      # Sample source notes
-├── docs/architecture.md           # Design notes and data flow
-├── pyproject.toml                 # Package, tool, and dependency config
-└── .github/workflows/ci.yml       # Continuous integration
-```
+Rules mode recognizes labelled sections, explicit question/answer pairs, common definition patterns, and
+numerical quantities with units. It is fast and deterministic, but it does not perform the AI coverage audit.
+Every rules-mode answer is copied from the source.
 
 ## Development
 
-Install development tools:
-
-```bash
+```powershell
 python -m pip install -e ".[dev]"
-```
-
-Run the checks used in CI:
-
-```bash
 ruff check .
 pytest --cov=flashcard_generator --cov-report=term-missing
-```
-
-Frontend regression tests (Node.js 20+ is needed only for development):
-
-```bash
 npm ci
 npm test
 ```
 
-These exercise DOM state, AI defaults, coverage, add-card focus, storage failures, repeated submissions,
-and error recovery. Python regressions cover omission repair, later source sections, conflicting answers,
-source provenance, limits, and job cancellation. They do not replace live-model or pixel-level browser QA.
+Automated tests use scripted model responses and a fake Ollama transport. They validate orchestration, failure
+handling, grounding, and the UI; they do not claim live-model factual quality.
 
-The web API can also be tested directly:
+Project layout:
 
-```bash
-curl -X POST http://127.0.0.1:5000/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{"notes":"Velocity: The rate of change of displacement.","max_cards":10,"use_ai":false}'
+```text
+src/flashcard_generator/
+├── ai.py             # Ollama transport and coverage-first AI pipeline
+├── generator.py      # Deterministic rules generator
+├── importers.py      # TXT, Markdown, and PDF extraction
+├── jobs.py           # Background progress and cancellation
+├── web.py            # Flask routes and launcher
+├── templates/        # Interface markup
+└── static/           # Interface CSS and JavaScript
 ```
 
-For asynchronous AI generation, `POST /api/jobs` accepts the same JSON (`use_ai` defaults to `true`,
-`max_cards` defaults to `null`) and returns `202` with `job_id`. Poll `GET /api/jobs/<job_id>` for
-`queued`, `running`, `completed`, `failed`, or `cancelled`. Completed responses contain `result.cards`
-and `result.coverage`. To cancel, `POST /api/jobs/<job_id>/cancel`. The single-user server permits one
-background generation at a time; concurrent submissions return `409`.
+## API
+
+`POST /api/generate` accepts:
+
+```json
+{"notes": "Velocity: rate of change of displacement.", "max_cards": null, "use_ai": true}
+```
+
+For AI generation, prefer `POST /api/jobs`, then poll `GET /api/jobs/<job_id>`. Cancel with
+`POST /api/jobs/<job_id>/cancel`. `GET /api/status` reports whether Ollama is reachable and whether the
+configured model is installed without sending any notes.
 
 ## Troubleshooting
 
-**The browser did not open:**
-Open `http://127.0.0.1:5000` manually and confirm the terminal says Flask is running.
+**Could not reach Ollama:** Start the Ollama desktop app. Check `http://127.0.0.1:11434/api/tags` and confirm
+`OLLAMA_URL` if you changed it.
 
-**`ModuleNotFoundError: flashcard_generator`:**
-Activate the virtual environment and rerun `python -m pip install -e .` from the repository root.
+**Model is not installed:** Run `ollama pull qwen3:8b`, or pull another model and set `OLLAMA_MODEL` to its exact
+name.
 
-**Gemini says it is not configured:**
-Confirm the file is named exactly `.env`, the key is assigned to `GEMINI_API_KEY`, and the app was restarted.
+**Generation is slow or times out:** Keep Ollama running, try a smaller source, increase `OLLAMA_TIMEOUT`, or
+switch to `qwen3:4b`. The first request also loads the model into memory.
 
-**Gemini fails:**
-The error now distinguishes authentication/permission, quota/rate limits, unavailable model, timeouts, and
-malformed model output. Check the relevant key, AI Studio usage, or `GEMINI_MODEL` setting. For timeouts or
-truncated output, retry with smaller source sections. A failed run does not generate replacement local cards.
+**Ollama returns invalid structured output:** Update Ollama and retry. If the problem persists, use a stronger
+instruction-following model.
 
-**Generation is taking longer than before:**
-Separate extraction and review calls trade speed and quota for additional checks. Follow progress or cancel;
-refreshing reconnects to the same session in that tab rather than starting another paid generation.
+**Port 5000 is occupied:** Set `PORT=5050` in `.env` and restart Recall.
 
-**The report shows missing facts:**
-Remove a manually set card cap, inspect the listed source excerpts, correct broken PDF extraction, or generate
-from a smaller relevant section. Do not interpret a partial deck as complete coverage.
+**PDF content is missing:** Scanned pages, images, diagrams, handwriting, and complex mathematical layout need
+OCR and are not supported. Review the extracted text before generating.
 
-**Port 5000 is already in use:**
-Set another port in `.env`, for example `PORT=5050`, then restart.
+## Limits
 
-**PowerShell blocks virtual-environment activation:**
-Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then activate `.venv` again. This changes policy
-for the current PowerShell process only.
-
-## Current limitations
-
-- Local mode uses linguistic heuristics and is less selective than AI mode.
-- Text-based PDF import is supported; scanned PDF/image OCR is not included.
-- Gemini requires an API key, internet access, and available quota.
-- Automatic AI decks have a safety ceiling of 1,000 cards; more than 2,000 detected objectives requires splitting
-  the source. Manual caps can reduce coverage and are reported explicitly. Local auto mode caps at 500 cards.
-- The app is intended for local use and has no user accounts or shared cloud decks.
-- Generated cards should be reviewed before relying on them for high-stakes material.
+- AI coverage counts only model-identified facts; two model passes can still miss the same material.
+- A manual card cap can intentionally leave objectives uncovered.
+- Jobs live in one Python process and disappear when the server restarts.
+- Cancellation takes effect after the current Ollama request returns.
+- The app is intended for one local user and has no accounts or shared decks.

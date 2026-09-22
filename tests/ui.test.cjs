@@ -58,15 +58,15 @@ test("AI defaults on, auto count, async results and coverage become stale after 
   dom.window.close();
 });
 
-test("failed AI job preserves old deck and clearly reports failure", async () => {
+test("failed local AI job preserves old deck and clearly reports failure", async () => {
   const {dom,$} = app({local:false,fetch:async url => ({ok:true,json:async()=>url === "/api/jobs"
-    ? {job_id:"failed"} : {status:"failed",error:"Gemini quota/rate limit reached."}})});
+    ? {job_id:"failed"} : {status:"failed",error:"Could not reach Ollama. Start Ollama."}})});
   $("#add-button").click();
   $("#notes").value = "Force is a push or pull.";
   $("#generate-button").click();
   await tick();
   assert.equal($("#card-total").textContent, "1");
-  assert.match($("#notice").textContent, /quota.*earlier notes/);
+  assert.match($("#notice").textContent, /Ollama.*earlier notes/);
   assert.equal($("#generate-button").disabled, false);
   assert.equal($("#cancel-button").hidden, true);
   dom.window.close();
@@ -128,7 +128,7 @@ test("invalid input and empty results preserve deck; valid generation works afte
   $("#notes").value = "Force is a push or pull.";
   $("#generate-button").click();
   await tick();
-  assert.match($("#deck-mode").textContent, /Gemini.*test-model/);
+  assert.match($("#deck-mode").textContent, /Ollama.*test-model/);
   assert.equal($("#generate-button").disabled, false);
   dom.window.close();
 });

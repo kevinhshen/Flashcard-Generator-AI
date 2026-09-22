@@ -5,7 +5,10 @@ from flashcard_generator.web import create_app
 
 @pytest.fixture()
 def client(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setattr(
+        "flashcard_generator.web.ollama_status",
+        lambda: {"available": False, "model": "qwen3:8b", "model_installed": False},
+    )
     app = create_app()
     app.config.update(TESTING=True)
     return app.test_client()
@@ -18,8 +21,11 @@ def test_home_page_loads(client):
     assert b"Recall flashcards" in response.data
 
 
-def test_status_reports_ai_unavailable(client):
-    assert client.get("/api/status").get_json() == {"ok": True, "ai_available": False}
+def test_status_reports_ollama_readiness(client):
+    assert client.get("/api/status").get_json() == {
+        "ok": True,
+        "ai": {"available": False, "model": "qwen3:8b", "model_installed": False},
+    }
 
 
 def test_generate_rejects_empty_notes(client):
@@ -39,14 +45,20 @@ def test_local_generation_api(client):
     assert payload["cards"][0]["front"] == "What is Velocity?"
 
 
-def test_missing_ai_key_never_silently_falls_back(client):
+def test_ollama_failure_never_silently_falls_back(client, monkeypatch):
+    def failing(*_args, **_kwargs):
+        from flashcard_generator.ai import AIError
+
+        raise AIError("service_unavailable", "Could not reach Ollama. Start Ollama.")
+
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", failing)
     response = client.post(
         "/api/generate",
         json={"notes": "Velocity: The rate of change of displacement.", "use_ai": True},
     )
     payload = response.get_json()
-    assert response.status_code == 400
-    assert "Gemini is not configured" in payload["error"]
+    assert response.status_code == 502
+    assert "Could not reach Ollama" in payload["error"]
     assert "cards" not in payload
 
 
@@ -84,8 +96,6 @@ def test_local_mode_never_calls_ai(client, monkeypatch):
 
 
 def test_ai_error_does_not_leak_or_fallback(client, monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-
     def failing(*args, **kwargs):
         raise RuntimeError("secret-key-value")
 
@@ -96,15 +106,14 @@ def test_ai_error_does_not_leak_or_fallback(client, monkeypatch):
     assert "cards" not in response.get_json()
 
 
-def test_ai_is_default_even_without_key(client):
-    response = client.post("/api/jobs", json={"notes": "Force is a push or pull."})
-    assert response.status_code == 400
-    assert response.get_json()["error_code"] == "missing_key"
-    assert b'value="ai" selected' in client.get("/").data
+def test_local_ai_is_default_and_needs_no_api_key(client):
+    page = client.get("/").data
+    assert b'value="ai" selected' in page
+    assert b"Ollama" in page
+    assert b"GEMINI_API_KEY" not in page
 
 
 def test_ai_job_api_and_auto_card_limit(client, monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     received = []
 
     def generate(notes, count, **kwargs):
