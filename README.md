@@ -77,9 +77,12 @@ python FlashcardGenerator.py
 The default **Gemini · reviewed AI** generator requires a key. To configure it:
 
 1. Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Copy `.env.example` to a new file named `.env`.
-3. Put the key after `GEMINI_API_KEY=` in `.env`.
-4. Restart the app.
+2. Open the app and paste the key into the **Gemini API key** field.
+3. Click **Save**. Gemini generation is available immediately, without restarting.
+
+Save creates `.env` in the project root if needed and preserves any other settings in it.
+The field is masked, cleared on submission, and hidden once a key is configured. Alternatively,
+you can copy `.env.example` to `.env`, set `GEMINI_API_KEY`, and start the app.
 
 Example `.env`:
 
@@ -90,8 +93,10 @@ HOST=127.0.0.1
 PORT=5000
 ```
 
-Never commit `.env`. It is ignored by Git. The key stays on the Python server and is not sent to browser
-JavaScript. AI mode sends the pasted notes to the Gemini API; local mode does not.
+Never commit `.env`. It is ignored by Git. Save sends the key to the local Python server and writes it
+to a file accessible only to your user. The saved key is never returned to the browser, displayed, or
+logged by the app, and is not stored in browser storage. AI mode sends the pasted notes to the Gemini API;
+local mode does not.
 
 For offline use without a key, explicitly select **Local rules**. That mode is deterministic pattern matching,
 not a locally deployed language model. No Hugging Face model is bundled. The app running on localhost does not
@@ -99,7 +104,8 @@ make Gemini local: its inference happens on Google's servers.
 
 Generation makes multiple model calls and may consume paid quota. Roughly two calls read/audit each source
 section and two draft/review each batch of up to 12 facts, plus one repair call per batch with missing coverage.
-Transient server errors may retry once. Long notes can take several minutes; progress shows the current step.
+Transient server errors retry the failed step up to three times, waiting 2, 4, then 8 seconds.
+Progress shows each retry, and Cancel stops the wait. Long notes can take several minutes.
 
 ## Using the app
 
@@ -156,8 +162,9 @@ The default model remains configurable through `GEMINI_MODEL`. No live model-qua
 automated tests use scripted model responses to verify pipeline behavior, not real-model factual accuracy.
 
 The UI polls a background job rather than holding a connection open for the entire generation. A provider
-request has a 90-second timeout and up to one retry for transient server errors. Cancellation takes effect
-after the in-flight call/retry returns. API failures are classified (key, quota, model, timeout, invalid output)
+request has a 90-second timeout. Transient server errors get at most four attempts per step, including
+the initial request; successful earlier steps are not repeated. Cancellation takes effect during retry
+waits or after an in-flight call returns. API failures are classified (key, quota, model, timeout, invalid output)
 and never silently switch to local generation. Old cards remain visible after errors/empty results, with a
 notice that they may belong to earlier notes. Completed jobs are retained in server memory for up to 30 minutes
 (at most ten completed jobs); restarting the server loses them. Export decks you want to keep.
@@ -241,7 +248,9 @@ Open `http://127.0.0.1:5000` manually and confirm the terminal says Flask is run
 Activate the virtual environment and rerun `python -m pip install -e .` from the repository root.
 
 **Gemini says it is not configured:**
-Confirm the file is named exactly `.env`, the key is assigned to `GEMINI_API_KEY`, and the app was restarted.
+Paste your key in the **Gemini API key** field and click **Save**. If saving fails, check that the project
+folder and `.env` are writable. If configuring the file manually, use `GEMINI_API_KEY` in the project-root
+`.env` and restart the app to load the change.
 
 **Gemini fails:**
 The error now distinguishes authentication/permission, quota/rate limits, unavailable model, timeouts, and
