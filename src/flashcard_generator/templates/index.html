@@ -39,10 +39,19 @@
               <option value="local">Local rules · limited coverage</option>
             </select>
             <small id="mode-help">Sends notes to Google. Inventories facts, audits omissions, drafts and reviews cards.
-              Multiple requests cost more and can take several minutes.
-              {% if not ai_available %}Add GEMINI_API_KEY to .env and restart to enable generation.{% endif %}</small>
+              Multiple requests cost more and can take several minutes.</small>
           </div>
         </div>
+        <form id="api-key-form" class="api-key-setup" {% if ai_available %}hidden{% endif %}>
+          <label for="api-key">Gemini API key</label>
+          <small id="api-key-help">Paste your key to enable Gemini. Save creates a local, gitignored .env file. No restart needed.</small>
+          <div class="api-key-controls">
+            <input id="api-key" type="password" required maxlength="4096" autocomplete="off" spellcheck="false"
+              autocapitalize="none" aria-describedby="api-key-help api-key-status" placeholder="Paste your Gemini key">
+            <button id="save-api-key" class="secondary-button" type="submit">Save</button>
+          </div>
+        </form>
+        <p id="api-key-status" class="notice" role="status" hidden></p>
         <button id="generate-button" class="primary-button" type="button"><span>Generate</span><span>↵</span></button>
         <button id="cancel-button" class="secondary-button" type="button" hidden>Cancel generation</button>
         <p class="shortcut">Ctrl/⌘ + Enter</p>

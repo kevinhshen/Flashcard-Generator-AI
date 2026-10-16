@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 import threading
 import webbrowser
+from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 from flask import Flask, jsonify, render_template, request
 
 from .ai import generate_deck, has_api_key, safe_ai_error
@@ -15,9 +16,12 @@ from .importers import MAX_FILE_BYTES, MAX_TEXT_CHARS, extract_notes
 from .jobs import JobStore
 
 
-def create_app() -> Flask:
-    load_dotenv()
+def create_app(*, env_path: Path | None = None) -> Flask:
+    # Read and write the same file, independent of the launch directory.
+    env_path = Path(env_path) if env_path is not None else Path(__file__).resolve().parents[2] / ".env"
+    load_dotenv(env_path)
     app = Flask(__name__)
+    key_lock = threading.Lock()
     app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_BYTES + 65536
     jobs = JobStore()
     app.extensions["generation_jobs"] = jobs
@@ -33,6 +37,44 @@ def create_app() -> Flask:
     @app.get("/api/status")
     def status():
         return jsonify({"ok": True, "ai_available": has_api_key()})
+
+    @app.post("/api/settings/api-key")
+    def save_api_key():
+        # JSON and same-origin requests prevent cross-site form submissions to
+        # this local server. Never put credentials in a URL or response.
+        origin = request.headers.get("Origin")
+        if (origin and origin != request.host_url.rstrip("/")) or request.headers.get(
+            "Sec-Fetch-Site"
+        ) == "cross-site":
+            return jsonify(error="Save the key from this app's page."), 403
+        if not request.is_json:
+            return jsonify(error="Send the API key as JSON."), 415
+        payload = request.get_json(silent=True)
+        key = payload.get("api_key") if isinstance(payload, dict) else None
+        # Treat API keys as opaque tokens; formats can include punctuation and
+        # longer encoded credentials. Only reject unsafe .env syntax/whitespace.
+        if not isinstance(key, str) or not key.strip() or len(key) > 4096:
+            return jsonify(error="Paste a valid Gemini API key."), 400
+        key = key.strip()
+        if not all(
+            character.isascii() and (character.isalnum() or character in "_.~+/=-")
+            for character in key
+        ):
+            return jsonify(error="Paste only the Gemini API key, without quotes or spaces."), 400
+        with key_lock:
+            try:
+                if env_path.exists():
+                    env_path.chmod(0o600)
+                # python-dotenv preserves other settings and replaces the file
+                # atomically; a new file is private to the current user.
+                set_key(env_path, "GEMINI_API_KEY", key)
+            except (OSError, UnicodeError):
+                return jsonify(
+                    error="Could not save .env. Check the project folder's write permissions."
+                ), 500
+            # Only enable generation after the key is safely persisted.
+            os.environ["GEMINI_API_KEY"] = key
+        return jsonify(ok=True, ai_available=True)
 
     @app.post("/api/import")
     def import_file():
@@ -68,7 +110,7 @@ def create_app() -> Flask:
         if use_ai and not has_api_key():
             return None, (
                 jsonify(
-                    error="Gemini is not configured. Add GEMINI_API_KEY to .env and restart, "
+                    error="Gemini is not configured. Save your Gemini API key in the setup field, "
                     "or select Local rules.",
                     error_code="missing_key",
                 ),

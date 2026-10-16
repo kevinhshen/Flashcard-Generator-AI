@@ -7,6 +7,10 @@ const generateButton = $("#generate-button");
 const cardsContainer = $("#cards");
 const reviewScroll = $(".review-scroll");
 const notice = $("#notice");
+const apiKeyForm = $("#api-key-form");
+const apiKeyInput = $("#api-key");
+let aiAvailable = apiKeyForm.hidden;
+let savingKey = false;
 let cards = [];
 let studyIndex = 0;
 let showingAnswer = false;
@@ -24,6 +28,52 @@ function showNotice(message, error = false) {
   notice.classList.toggle("error", error);
   notice.hidden = !message;
 }
+function updateGenerateButton() {
+  generateButton.disabled = busy || (modeInput.value === "ai" && !aiAvailable);
+}
+modeInput.addEventListener("change", updateGenerateButton);
+updateGenerateButton();
+apiKeyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (savingKey || !apiKeyForm.reportValidity()) return;
+  const body = JSON.stringify({ api_key: apiKeyInput.value.trim() });
+  apiKeyInput.value = "";
+  savingKey = true;
+  $("#save-api-key").disabled = true;
+  apiKeyInput.disabled = true;
+  const status = $("#api-key-status");
+  status.hidden = false;
+  status.classList.remove("error");
+  status.textContent = "Saving key…";
+  try {
+    await requestJson("/api/settings/api-key", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body,
+    }, 15000);
+    aiAvailable = true;
+    apiKeyForm.hidden = true;
+    modeInput.querySelector('option[value="ai"]').textContent = "Gemini · reviewed AI";
+    status.textContent = "Key saved. Gemini is ready to generate.";
+    updateGenerateButton();
+    generateButton.focus();
+  } catch (error) {
+    // Never render request data or arbitrary exception text for credentials.
+    const messages = {
+      400: "The key format was rejected. Paste the key copied from AI Studio without spaces or quotes.",
+      403: "The server rejected this page's origin. Reopen Recall using the address printed in its terminal, then retry.",
+      404: "The running server is missing the Save endpoint. Restart the app once to load the update, then retry.",
+      405: "The running server is missing the Save endpoint. Restart the app once to load the update, then retry.",
+      500: "The server could not write .env. Check write permissions for the project folder and .env, then retry.",
+    };
+    status.textContent = messages[error.status] ||
+      "Could not reach the Save endpoint. Check that the local app is running, then paste the key again.";
+    status.classList.add("error");
+  } finally {
+    savingKey = false;
+    $("#save-api-key").disabled = false;
+    apiKeyInput.disabled = false;
+    if (!aiAvailable) apiKeyInput.focus();
+  }
+});
 function setBusy(value) {
   busy = value;
   for (const selector of ["#generate-button", "#import-button", "#sample-button", "#generation-mode", "#card-count", "#add-button"]) {
@@ -33,6 +83,7 @@ function setBusy(value) {
   cardsContainer.querySelectorAll("textarea, button").forEach((element) => { element.disabled = value; });
   generateButton.firstElementChild.textContent = value ? "Processing…" : "Generate";
   generateButton.setAttribute("aria-busy", String(value));
+  updateGenerateButton();
 }
 function renderStudyCard() {
   const card = cards[studyIndex];
@@ -113,6 +164,11 @@ async function requestJson(url, options = {}, timeout = 75000) {
 }
 async function generateCards() {
   if (busy) return;
+  if (modeInput.value === "ai" && !aiAvailable) {
+    showNotice("Save your Gemini API key first, or select Local rules.", true);
+    apiKeyInput.focus();
+    return;
+  }
   if (jobId) { showNotice("A generation session is still active. Refresh to reconnect or cancel it first.", true); return; }
   const notes = notesInput.value.trim();
   if (!notes) { showNotice("Paste or import notes first.", true); notesInput.focus(); return; }
@@ -276,7 +332,7 @@ $("#cancel-button").addEventListener("click", async () => {
   if (!jobId) return;
   try {
     await requestJson("/api/jobs/" + jobId + "/cancel", {method:"POST"}, 15000);
-    showNotice("Cancellation requested. Waiting for the current provider call and any in-flight retry to finish.");
+    showNotice("Cancellation requested. Waiting for the current provider call to finish; no further retries will start.");
     if (!busy) {
       setBusy(true);
       try { await followJob(); }

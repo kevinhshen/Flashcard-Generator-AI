@@ -81,8 +81,10 @@ def test_sdk_uses_structured_output_and_detects_truncated_responses(monkeypatch)
     fake.models.generate_content.return_value = SimpleNamespace(
         parsed=Inventory(facts=[]), candidates=[]
     )
-    monkeypatch.setattr("google.genai.Client", lambda **kwargs: fake)
+    factory = MagicMock(return_value=fake)
+    monkeypatch.setattr("google.genai.Client", factory)
     provider = GeminiProvider()
+    assert factory.call_args.kwargs["http_options"].retry_options.attempts == 1
     assert provider.ask("inventory", {"owned_section": NOTES}, Inventory).facts == []
     config = fake.models.generate_content.call_args.kwargs["config"]
     assert config.response_schema is Inventory
@@ -217,6 +219,82 @@ def test_provider_failure_never_returns_partial_or_local_cards():
     with pytest.raises(AIError) as failure:
         generate_deck(NOTES, provider=Provider(fail))
     assert failure.value.code == "timeout"
+
+
+def test_temporary_failure_retries_only_failed_step_and_counts_requests(monkeypatch):
+    waits, progress = [], []
+    monkeypatch.setattr("flashcard_generator.ai.time.sleep", waits.append)
+    failures = 0
+
+    def unavailable(stage, data):
+        nonlocal failures
+        if stage == "review" and failures < 2:
+            failures += 1
+            error = RuntimeError("secret-key-and-private-notes")
+            error.code = 503
+            raise error
+
+    provider = Provider(unavailable)
+    result = generate_deck(NOTES, provider=provider, progress=progress.append)
+    assert [stage for stage, _ in provider.calls] == [
+        "inventory", "audit_inventory", "draft", "review", "review", "review"
+    ]
+    assert result["coverage"]["requests"] == 6
+    assert result["coverage"]["all_identified_facts_covered"]
+    assert sum(waits) == 6
+    assert any("attempt 3/4" in message for message in progress)
+    assert not any("secret" in message for message in progress)
+
+
+def test_persistent_failure_has_bounded_retries_and_safe_error(monkeypatch):
+    waits = []
+    monkeypatch.setattr("flashcard_generator.ai.time.sleep", waits.append)
+
+    def unavailable(stage, data):
+        error = RuntimeError("secret-key-and-private-notes")
+        error.code = 503
+        raise error
+
+    provider = Provider(unavailable)
+    with pytest.raises(AIError) as failure:
+        generate_deck(NOTES, provider=provider)
+    assert failure.value.code == "provider_unavailable"
+    assert "4 attempts" in str(failure.value)
+    assert "secret" not in str(failure.value)
+    assert len(provider.calls) == 4
+    assert sum(waits) == 14
+
+
+@pytest.mark.parametrize("code", [400, 401, 403, 404, 429])
+def test_permanent_errors_are_not_retried(code, monkeypatch):
+    sleep = MagicMock()
+    monkeypatch.setattr("flashcard_generator.ai.time.sleep", sleep)
+
+    def fail(stage, data):
+        error = RuntimeError("private response")
+        error.code = code
+        raise error
+
+    provider = Provider(fail)
+    with pytest.raises(AIError):
+        generate_deck(NOTES, provider=provider)
+    assert len(provider.calls) == 1
+    sleep.assert_not_called()
+
+
+def test_cancel_during_backoff_does_not_retry(monkeypatch):
+    cancelled = Event()
+    monkeypatch.setattr("flashcard_generator.ai.time.sleep", lambda _: cancelled.set())
+
+    def unavailable(stage, data):
+        error = RuntimeError("private response")
+        error.code = 503
+        raise error
+
+    provider = Provider(unavailable)
+    with pytest.raises(Cancelled):
+        generate_deck(NOTES, provider=provider, cancelled=cancelled.is_set)
+    assert len(provider.calls) == 1
 
 
 def test_background_job_progress_concurrency_and_cancellation():
