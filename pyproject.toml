@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recall-flashcard-generator"
+version = "1.0.0"
+description = "Convert study notes into editable, export-ready flashcards."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "Flask>=3.1,<4",
+  "google-genai>=1.47,<2",
+  "pydantic>=2.8,<3",
+  "python-dotenv>=1.0,<2",
+  "pypdf>=5.6,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<8",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+recall-flashcards = "flashcard_generator.web:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+flashcard_generator = ["templates/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
