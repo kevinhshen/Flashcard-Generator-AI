@@ -3,6 +3,7 @@
 .env.*
 *.env
 !.env.example
+.venv-backup-*/
 
 # Python
 __pycache__/
