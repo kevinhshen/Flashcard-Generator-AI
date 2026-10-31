@@ -15,12 +15,25 @@ python -m pip install -e .
 python run.py
 ```
 
-Open `http://127.0.0.1:5000`, enter your API key, and click **Save**. The key is stored in the project's gitignored `.env` file.
+On macOS or Linux, use `python3 -m venv .venv` and `source .venv/bin/activate` instead.
+
+Open `http://127.0.0.1:5000`, enter your API key, and click **Save**. The key is stored in the project's gitignored `.env` file. You can also set `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-2.5-flash`), `HOST`, and `PORT` there yourself.
 
 ## How it works
 
 Gemini extracts facts from your notes, checks for omissions, then drafts and reviews cards. The app checks source excerpts, removes duplicates, and reports coverage gaps. You can edit, add, delete, and preview cards before exporting.
 
-Gemini generation sends note text to Google and uses your API quota. Review the results against your notes; coverage counts do not guarantee accuracy or completeness. Scanned PDFs and diagrams are unsupported.
+Gemini generation sends note text to Google and uses your API quota. Review the results against your notes; coverage counts do not guarantee accuracy or completeness.
+
+Limits: files up to 10 MB or 200 pages, notes up to 200,000 characters, and up to 1,000 cards per run. Scanned PDFs and diagrams are unsupported.
 
 An optional **Local rules** mode handles simple note patterns offline without a language model.
+
+## Development
+
+```bash
+python -m pip install -e ".[dev]"
+ruff check .
+pytest
+npm ci && npm test    # UI tests, Node 20+
+```
