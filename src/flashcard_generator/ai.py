@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from .generator import Flashcard
 
+# Default values for chunking, batching and safety limits
+# Experimental Control Variables
 CHUNK_SIZE = 6000
 BATCH_SIZE = 12
 SAFETY_CARD_LIMIT = 1000
@@ -41,19 +43,26 @@ Output only the requested schema. Return empty lists for unusable source materia
 """
 
 
+# BaseModel - automatically process json data from Gemini
 class Fact(BaseModel):
+    # Field just allows to set min_length and description
+    # Just have text: str also works
     text: str = Field(min_length=3, description="One independently testable fact, with its conditions")
     source: str = Field(min_length=3, description="Exact contiguous source excerpt supporting this fact")
 
 
 class Inventory(BaseModel):
     facts: list[Fact]
+    # default_factory ensures objects of the class doesn't point to the same list
+    # without it, all instances of Inventory would share the same list for exclusions 
+    # Issue! 
     exclusions: list[str] = Field(default_factory=list, description="Reasons for ignoring non-study material")
 
 
 class DraftCard(BaseModel):
     front: str = Field(min_length=3)
     back: str = Field(min_length=1)
+    
     fact_ids: list[str] = Field(description="IDs of the supplied facts actually tested, not merely mentioned")
 
 
@@ -74,13 +83,20 @@ class Cancelled(AIError):
         super().__init__("cancelled", "Generation cancelled. No local fallback was used.")
 
 
+# check the Gemini API key from the environment
 def has_api_key() -> bool:
     return bool(os.getenv("GEMINI_API_KEY", "").strip())
 
 
+# Handle Gemini SDK errors and other exceptions in a user-friendly way
 def safe_ai_error(exc: Exception) -> AIError:
+    '''Convert SDK errors and other exceptions to user-friendly AIError instances.'''
+
     if isinstance(exc, AIError):
         return exc
+
+    
+
     code = getattr(exc, "code", None)
     status = getattr(exc, "status_code", None)
     code = code if isinstance(code, int) else status
@@ -120,15 +136,27 @@ def split_source(notes: str, size: int = CHUNK_SIZE) -> list[str]:
     """Lossless partition: every character belongs to exactly one source section."""
     result = []
     start = 0
+
+    # Process chunk by chunk
     while start < len(notes):
         end = min(start + size, len(notes))
         if end < len(notes):
+            # rfind an empty line on the second half of the chunk
+            # boundary is the index of the last match
             boundary = notes.rfind("\n\n", start + size // 2, end)
+
+            # if not found 
             if boundary < 0:
+                # rfind a single line break
                 boundary = notes.rfind("\n", start + size // 2, end)
             if boundary < 0:
+                # use regex to find sentences that end with '.!?' and a space or tab after
+                # searched the second half of chunk
                 sentences = list(re.finditer(r"[.!?][ \t]+", notes[start + size // 2 : end]))
+
+                # if list of sentence is not empty
                 if sentences:
+                    # set boundary to the end of the match, the space or tab at the end of the sentence
                     boundary = start + size // 2 + sentences[-1].end() - 1
             if boundary < 0:
                 boundary = notes.rfind(" ", start + size // 2, end)
@@ -158,6 +186,7 @@ class GeminiProvider:
             raise AIError(
                 "missing_key", "Gemini is not configured. Save your Gemini API key in the setup field."
             )
+        
         self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.client = genai.Client(
             api_key=os.environ["GEMINI_API_KEY"].strip(),
