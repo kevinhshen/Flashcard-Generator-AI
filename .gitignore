@@ -1,9 +1,7 @@
 # Secrets
 .env
 .env.*
-*.env
 !.env.example
-.venv-backup-*/
 
 # Python
 __pycache__/
@@ -13,11 +11,14 @@ __pycache__/
 .ruff_cache/
 node_modules/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .venv/
-*.venv
 venv/
 env/
+build/
+dist/
 
 # Generated exports
 *.csv
@@ -27,3 +28,7 @@ env/
 Thumbs.db
 .idea/
 .vscode/
+
+*.env
+.venv-backup-*/
+*.venv

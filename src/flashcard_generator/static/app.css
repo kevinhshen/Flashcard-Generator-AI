@@ -29,10 +29,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; display: flex; align-items: c
 .secondary-button, .primary-button { padding: 9px 12px; border: 1px solid var(--line); border-radius: 5px; background: #202933; }
 .secondary-button:hover:not(:disabled) { border-color: var(--muted); }
 .text-button { background: none; border: 0; color: var(--accent); padding: 0; font-size: 12px; }
-textarea, select, input[type="number"], input[type="password"] { background: var(--field); border: 1px solid var(--line); border-radius: 5px; padding: 12px; line-height: 1.5; }
-.api-key-setup { display: grid; gap: 8px; margin-bottom: 20px; }
-.api-key-controls { display: flex; gap: 8px; }
-.api-key-controls input { flex: 1; width: 100%; min-width: 0; }
+textarea, select, input[type="number"] { background: var(--field); border: 1px solid var(--line); border-radius: 5px; padding: 12px; line-height: 1.5; }
 #notes { width: 100%; height: 290px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 textarea::placeholder { color: #8997a5; }
 .textarea-meta { display: flex; justify-content: space-between; margin: 9px 0 20px; gap: 12px; }

@@ -1,5 +1,10 @@
 {
+  "name": "recall-ui-tests",
   "private": true,
-  "scripts": {"test": "node --test tests/ui.test.cjs"},
-  "devDependencies": {"jsdom": "^26.1.0"}
+  "scripts": {
+    "test": "node --test tests/ui.test.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
 }

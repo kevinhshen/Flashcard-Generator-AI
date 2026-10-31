@@ -35,23 +35,13 @@
           <div class="control-group">
             <label for="generation-mode">Generator</label>
             <select id="generation-mode" aria-describedby="mode-help">
-              <option value="ai" selected>Gemini · reviewed AI{% if not ai_available %} (key required){% endif %}</option>
+              <option value="ai" selected>T5 question model · local AI</option>
               <option value="local">Local rules · limited coverage</option>
             </select>
-            <small id="mode-help">Sends notes to Google. Inventories facts, audits omissions, drafts and reviews cards.
-              Multiple requests cost more and can take several minutes.</small>
+            <small id="mode-help">Runs on your computer. First use downloads and caches about 900 MB; later runs
+              reuse it. Answers are selected from exact source excerpts before the model writes questions.</small>
           </div>
         </div>
-        <form id="api-key-form" class="api-key-setup" {% if ai_available %}hidden{% endif %}>
-          <label for="api-key">Gemini API key</label>
-          <small id="api-key-help">Paste your key to enable Gemini. Save creates a local, gitignored .env file. No restart needed.</small>
-          <div class="api-key-controls">
-            <input id="api-key" type="password" required maxlength="4096" autocomplete="off" spellcheck="false"
-              autocapitalize="none" aria-describedby="api-key-help api-key-status" placeholder="Paste your Gemini key">
-            <button id="save-api-key" class="secondary-button" type="submit">Save</button>
-          </div>
-        </form>
-        <p id="api-key-status" class="notice" role="status" hidden></p>
         <button id="generate-button" class="primary-button" type="button"><span>Generate</span><span>↵</span></button>
         <button id="cancel-button" class="secondary-button" type="button" hidden>Cancel generation</button>
         <p class="shortcut">Ctrl/⌘ + Enter</p>
@@ -69,8 +59,8 @@
         <div id="notice" class="notice" role="status" hidden></div>
         <details id="coverage-report" class="coverage-report" hidden>
           <summary id="coverage-summary">Coverage report</summary>
-          <p>Counts refer to AI-identified facts, not a guarantee that every important fact was found or interpreted correctly.
-            Source excerpts are evidence for review, not proof of correctness.</p>
+          <p>Counts refer to bounded source units that produced validated cards, not a guarantee that every fact
+            was found or interpreted correctly. Source excerpts remain the basis for review.</p>
           <p id="coverage-state"></p>
           <ul id="coverage-gaps"></ul>
         </details>

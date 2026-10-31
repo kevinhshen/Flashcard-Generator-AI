@@ -1,283 +1,131 @@
-# Recall — AI Flashcard Generator
+# Recall
 
-Recall turns class notes into editable flashcards and exports them as a CSV that can be imported into Anki,
-Quizlet, or a spreadsheet. Gemini AI is selected by default and builds a source fact inventory, checks for
-omissions, drafts questions, and reviews their answers. Offline pattern matching is available separately.
+Recall is a local-first web application that converts notes into editable flashcards. It combines deterministic
+text parsing with a small Hugging Face T5 model, keeps generated answers grounded in the supplied notes, and
+exports reviewed cards as CSV.
 
-The app runs on your computer. Starting it opens the interface automatically in your default browser.
+The application does not require an API key, Ollama, Docker, or a separate model server.
 
-## Features
+## What it does
 
-- Paste notes or import UTF-8 text, Markdown, or a text-based PDF (up to 10 MB / 200 pages).
-- Generate cards locally with no account, API key, or internet connection.
-- AI generation includes separate fact extraction, omission audit, drafting, review, and coverage repair.
-- See progress, cancel long jobs, and reconnect after a page refresh.
-- Edit, add, delete, and preview cards before export.
-- Export UTF-8 CSV with `Front`, `Back`, and `Type` columns.
-- Explicit Local rules / Gemini modes; AI errors never silently switch generators.
-- Independent review scrolling, focused top-insert for new cards, and source excerpts.
-- Leave the card limit blank for automatic source coverage (up to 1,000 AI cards), or set a cap of 1–500.
-- Inspect a coverage report listing unresolved facts, unverifiable evidence, and excluded material.
-- Preserve unfinished notes in browser local storage.
-- Validate and deduplicate generated cards.
-- Run automated tests and lint checks in GitHub Actions.
+- Accepts pasted notes and imports UTF-8 text, Markdown, and text-based PDFs.
+- Runs `mrm8488/t5-base-finetuned-question-generation-ap` inside the Python process.
+- Downloads and caches the model automatically on the first AI generation.
+- Selects card answers from exact source excerpts before asking the model to write questions.
+- Includes a deterministic rules mode that does not load a model.
+- Reports source units that failed validation instead of silently hiding them.
+- Supports background progress, cooperative cancellation, refresh reconnection, editing, study preview, and CSV
+  export.
 
 ## Quick start
 
-### 1. Install Python
-
-Install Python 3.10 or newer. Verify the installation:
-
-```bash
-python --version
-```
-
-On Windows, use `py` instead of `python` in the commands below if that is how Python is installed.
-
-### 2. Create and activate a virtual environment
-
-Windows PowerShell:
+Python 3.10 or newer is required.
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-macOS or Linux:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install the application
-
-```bash
 python -m pip install --upgrade pip
 python -m pip install -e .
-```
-
-### 4. Start Recall
-
-```bash
 python run.py
 ```
 
-Your browser should open to `http://127.0.0.1:5000`. If it does not, open that address manually. Stop the server
-with `Ctrl+C` in the terminal.
+Recall opens `http://127.0.0.1:5000`. The first AI run downloads roughly 900 MB of model files into the normal
+Hugging Face cache. Later runs reuse the cached files and can start without internet access.
 
-The original launcher still works for compatibility:
+If PowerShell blocks virtual-environment activation:
 
-```bash
-python FlashcardGenerator.py
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-## Gemini setup (default generator)
+## Basic workflow
 
-The default **Gemini · reviewed AI** generator requires a key. To configure it:
+1. Paste notes or import a supported file.
+2. Choose **T5 question model** or **Local rules**.
+3. Leave the card limit blank for source-unit coverage, or set a limit from 1 to 500.
+4. Generate the deck and inspect rejected units and source excerpts.
+5. Edit the cards, use the study preview, and export CSV.
 
-1. Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Open the app and paste the key into the **Gemini API key** field.
-3. Click **Save**. Gemini generation is available immediately, without restarting.
+The exported columns are `Front`, `Back`, and `Type`.
 
-Save creates `.env` in the project root if needed and preserves any other settings in it.
-The field is masked, cleared on submission, and hidden once a key is configured. Alternatively,
-you can copy `.env.example` to `.env`, set `GEMINI_API_KEY`, and start the app.
+## How the AI path stays grounded
 
-Example `.env`:
+Recall does not ask the model to invent complete cards. It first parses the notes into bounded source units and
+selects a literal answer span using labels, explicit question/answer pairs, definitions, stated facts, and
+quantities. The model receives that answer plus its source context and generates only a question.
+
+The application then rejects malformed output, non-questions, vague questions, tautologies, and duplicates. A
+source excerpt remains attached to every accepted card for human review.
+
+This limits answer hallucination, but it does not prove that every generated question is pedagogically strong or
+that every fact was identified. The coverage report measures validated source units, not complete semantic fact
+coverage.
+
+## Configuration
+
+The defaults need no `.env` file. Copy `.env.example` to `.env` only when overriding them:
 
 ```dotenv
-GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-2.5-flash
+HF_MODEL_ID=mrm8488/t5-base-finetuned-question-generation-ap
+HF_DEVICE=auto
 HOST=127.0.0.1
 PORT=5000
 ```
 
-Never commit `.env`. It is ignored by Git. Save sends the key to the local Python server and writes it
-to a file accessible only to your user. The saved key is never returned to the browser, displayed, or
-logged by the app, and is not stored in browser storage. AI mode sends the pasted notes to the Gemini API;
-local mode does not.
+`HF_DEVICE=auto` prefers CUDA, then Apple MPS, then CPU. A replacement `HF_MODEL_ID` must support the T5
+`answer: ... context: ...` question-generation format.
 
-For offline use without a key, explicitly select **Local rules**. That mode is deterministic pattern matching,
-not a locally deployed language model. No Hugging Face model is bundled. The app running on localhost does not
-make Gemini local: its inference happens on Google's servers.
+## Project map
 
-Generation makes multiple model calls and may consume paid quota. Roughly two calls read/audit each source
-section and two draft/review each batch of up to 12 facts, plus one repair call per batch with missing coverage.
-Transient server errors retry the failed step up to three times, waiting 2, 4, then 8 seconds.
-Progress shows each retry, and Cancel stops the wait. Long notes can take several minutes.
+| Path | Responsibility |
+|---|---|
+| `run.py` | Primary launcher |
+| `FlashcardGenerator.py` | Compatibility launcher for earlier shortcuts |
+| `src/flashcard_generator/web.py` | Flask application, validation, and HTTP routes |
+| `src/flashcard_generator/ai.py` | Source units, answer selection, model lifecycle, and AI validation |
+| `src/flashcard_generator/generator.py` | Deterministic rules generator and shared parsing helpers |
+| `src/flashcard_generator/importers.py` | Bounded TXT, Markdown, and PDF extraction |
+| `src/flashcard_generator/jobs.py` | In-memory background job lifecycle |
+| `src/flashcard_generator/templates/` | HTML structure |
+| `src/flashcard_generator/static/` | Browser behavior and styling |
+| `tests/` | Python and browser regressions |
 
-## Using the app
-
-1. Paste notes or choose **Import file**.
-2. Leave **Card limit** blank to cover the source, or set a deliberate cap.
-3. Keep Gemini selected for AI review, or explicitly choose Local rules for offline pattern matching.
-4. Choose **Generate** or press `Ctrl/⌘ + Enter`. Follow progress; use **Cancel** to stop between model calls.
-5. Inspect the coverage report and source excerpts, then correct or refine cards in the review panel.
-6. Use the preview to check whether each question is answerable without seeing the back.
-7. Choose **Export CSV**. `Ctrl/⌘ + S` also exports while a deck exists.
-
-Headings formatted as `Term: explanation` produce reliable definition cards in local mode. Complete sentences and
-explicit question/answer pairs also work well.
-
-## CSV import
-
-The exported file contains a header row:
-
-```csv
-Front,Back,Type
-```
-
-When importing into Anki, map `Front` to the front field and `Back` to the back field. The `Type` column records
-whether Recall produced a `basic` or `cloze` card; it can be ignored if your target app does not use it.
-
-## How generation works
-
-### Local mode
-
-The local generator groups labelled sections and paragraphs, pairs questions with following answers, recognizes
-common definition patterns, and makes cloze cards only for recognized numerical quantities with units.
-It skips uncertain prose instead of blanking arbitrary words. It does not call
-an external service, and every answer is copied from the notes.
-
-### Gemini mode
-
-1. Partition the entire source into sections of at most 6,000 characters without dropping any characters.
-   Adjacent context helps resolve headings; evidence must occur in the section being processed.
-2. Extract independently testable facts with exact source excerpts. A separate audit checks for missed
-   definitions, formulas, units, conditions, exceptions, comparisons, processes, and worked examples.
-3. Draft focused question/answer cards in batches of at most 12 facts. Each card identifies the facts it tests.
-4. Review every batch for unsupported claims, logical errors, answer leakage, vague subjects, missing qualifiers,
-   and questions whose answers do not match. Request a targeted repair for uncovered facts.
-5. Validate source excerpts and fact IDs, reject empty/tautological cards, merge exact duplicates, and reject
-   conflicting answers to identical questions. Apply any card limit only after processing all source sections.
-6. Report covered and uncovered objectives, unverifiable excerpts, and reasons for exclusions.
-
-Coverage means **AI-identified facts represented by accepted cards**, not proof that all important source
-information was found or correctly understood. Source matching verifies an excerpt's presence, not logical
-entailment. The same model performs extraction and review, so correlated errors are possible. Compare the cards
-with your notes. Coverage becomes marked stale after you edit, add, or delete cards.
-
-The default model remains configurable through `GEMINI_MODEL`. No live model-quality benchmark is claimed:
-automated tests use scripted model responses to verify pipeline behavior, not real-model factual accuracy.
-
-The UI polls a background job rather than holding a connection open for the entire generation. A provider
-request has a 90-second timeout. Transient server errors get at most four attempts per step, including
-the initial request; successful earlier steps are not repeated. Cancellation takes effect during retry
-waits or after an in-flight call returns. API failures are classified (key, quota, model, timeout, invalid output)
-and never silently switch to local generation. Old cards remain visible after errors/empty results, with a
-notice that they may belong to earlier notes. Completed jobs are retained in server memory for up to 30 minutes
-(at most ten completed jobs); restarting the server loses them. Export decks you want to keep.
-
-### PDF import
-
-PDF text is extracted locally with pypdf and placed in the editable notes field before generation.
-Image-only/scanned PDFs require OCR and are not supported yet. Mixed PDFs show a warning for pages without
-extractable text. Diagrams, handwriting, mathematical layout, and reading order are not reliably recovered.
-Password-protected, malformed, oversized, and empty files show errors without replacing your notes.
-
-See [docs/architecture.md](docs/architecture.md) for the data flow and failure behavior.
-
-## Project structure
-
-```text
-.
-├── run.py                         # Recommended launcher
-├── FlashcardGenerator.py          # Backward-compatible launcher
-├── src/flashcard_generator/
-│   ├── generator.py               # Offline parsing and card generation
-│   ├── ai.py                      # Fact inventory, review, and coverage pipeline
-│   ├── jobs.py                    # Background progress and cancellation
-│   ├── importers.py               # Local text/Markdown/PDF extraction
-│   ├── web.py                     # Flask routes and browser launcher
-│   ├── templates/index.html       # Accessible interface markup
-│   └── static/                    # UI styles and interactions
-├── tests/                         # Generator and API tests
-├── examples/                      # Sample source notes
-├── docs/architecture.md           # Design notes and data flow
-├── pyproject.toml                 # Package, tool, and dependency config
-└── .github/workflows/ci.yml       # Continuous integration
-```
+For implementation details, read [Architecture](docs/architecture.md). For a complete project walkthrough and
+interview questions, read [Interview guide](docs/interview-guide.md).
 
 ## Development
 
-Install development tools:
-
-```bash
+```powershell
 python -m pip install -e ".[dev]"
-```
-
-Run the checks used in CI:
-
-```bash
+ruff format --check .
 ruff check .
 pytest --cov=flashcard_generator --cov-report=term-missing
-```
-
-Frontend regression tests (Node.js 20+ is needed only for development):
-
-```bash
 npm ci
 npm test
 ```
 
-These exercise DOM state, AI defaults, coverage, add-card focus, storage failures, repeated submissions,
-and error recovery. Python regressions cover omission repair, later source sections, conflicting answers,
-source provenance, limits, and job cancellation. They do not replace live-model or pixel-level browser QA.
+The automated tests use a scripted provider, so CI does not download model weights. Live-model quality is
+checked separately with a smoke test.
 
-The web API can also be tested directly:
+## Limits
 
-```bash
-curl -X POST http://127.0.0.1:5000/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{"notes":"Velocity: The rate of change of displacement.","max_cards":10,"use_ai":false}'
-```
-
-For asynchronous AI generation, `POST /api/jobs` accepts the same JSON (`use_ai` defaults to `true`,
-`max_cards` defaults to `null`) and returns `202` with `job_id`. Poll `GET /api/jobs/<job_id>` for
-`queued`, `running`, `completed`, `failed`, or `cancelled`. Completed responses contain `result.cards`
-and `result.coverage`. To cancel, `POST /api/jobs/<job_id>/cancel`. The single-user server permits one
-background generation at a time; concurrent submissions return `409`.
+- First-time AI setup needs internet access and sufficient disk space.
+- CPU inference speed depends on note length and hardware.
+- Scanned PDFs, handwriting, diagrams, and complex visual layouts require OCR and are not interpreted.
+- Jobs live in one Python process and disappear when the server restarts.
+- Cancellation takes effect between inference passes, not in the middle of a PyTorch operation.
+- The current architecture is intended for one local user, not a multi-user deployment.
 
 ## Troubleshooting
 
-**The browser did not open:**
-Open `http://127.0.0.1:5000` manually and confirm the terminal says Flask is running.
+**First generation is slow:** the model is downloading or loading. Keep the application open; later runs reuse
+the cache and the loaded runtime.
 
-**`ModuleNotFoundError: flashcard_generator`:**
-Activate the virtual environment and rerun `python -m pip install -e .` from the repository root.
+**Model setup fails:** confirm internet access and free disk space. Campus or corporate networks may block
+Hugging Face downloads.
 
-**Gemini says it is not configured:**
-Paste your key in the **Gemini API key** field and click **Save**. If saving fails, check that the project
-folder and `.env` are writable. If configuring the file manually, use `GEMINI_API_KEY` in the project-root
-`.env` and restart the app to load the change.
+**CUDA runs out of memory:** set `HF_DEVICE=cpu`, restart Recall, and use a smaller input.
 
-**Gemini fails:**
-The error now distinguishes authentication/permission, quota/rate limits, unavailable model, timeouts, and
-malformed model output. Check the relevant key, AI Studio usage, or `GEMINI_MODEL` setting. For timeouts or
-truncated output, retry with smaller source sections. A failed run does not generate replacement local cards.
+**Port 5000 is occupied:** set another `PORT` in `.env`, such as `5050`.
 
-**Generation is taking longer than before:**
-Separate extraction and review calls trade speed and quota for additional checks. Follow progress or cancel;
-refreshing reconnects to the same session in that tab rather than starting another paid generation.
-
-**The report shows missing facts:**
-Remove a manually set card cap, inspect the listed source excerpts, correct broken PDF extraction, or generate
-from a smaller relevant section. Do not interpret a partial deck as complete coverage.
-
-**Port 5000 is already in use:**
-Set another port in `.env`, for example `PORT=5050`, then restart.
-
-**PowerShell blocks virtual-environment activation:**
-Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then activate `.venv` again. This changes policy
-for the current PowerShell process only.
-
-## Current limitations
-
-- Local mode uses linguistic heuristics and is less selective than AI mode.
-- Text-based PDF import is supported; scanned PDF/image OCR is not included.
-- Gemini requires an API key, internet access, and available quota.
-- Automatic AI decks have a safety ceiling of 1,000 cards; more than 2,000 detected objectives requires splitting
-  the source. Manual caps can reduce coverage and are reported explicitly. Local auto mode caps at 500 cards.
-- The app is intended for local use and has no user accounts or shared cloud decks.
-- Generated cards should be reviewed before relying on them for high-stakes material.
+**PDF text is missing:** the PDF likely contains scanned images instead of embedded text. Run OCR before import.

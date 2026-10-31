@@ -1,16 +1,21 @@
-import os
-import stat
-
 import pytest
-from dotenv import dotenv_values
 
 from flashcard_generator.web import create_app
 
 
 @pytest.fixture()
-def client(monkeypatch, tmp_path):
-    monkeypatch.setenv("GEMINI_API_KEY", "")
-    app = create_app(env_path=tmp_path / ".env")
+def client(monkeypatch):
+    monkeypatch.setattr(
+        "flashcard_generator.web.model_status",
+        lambda: {
+            "available": True,
+            "model": "mrm8488/t5-base-finetuned-question-generation-ap",
+            "model_cached": False,
+            "model_loaded": False,
+            "automatic_download": True,
+        },
+    )
+    app = create_app()
     app.config.update(TESTING=True)
     return app.test_client()
 
@@ -22,96 +27,17 @@ def test_home_page_loads(client):
     assert b"Recall flashcards" in response.data
 
 
-def test_status_reports_ai_unavailable(client):
-    assert client.get("/api/status").get_json() == {"ok": True, "ai_available": False}
-
-
-def test_save_key_creates_private_env_and_enables_generation(client, tmp_path, monkeypatch, caplog):
-    key = "test-gemini-secret"
-    path = tmp_path / ".env"
-    assert not path.exists()
-    response = client.post("/api/settings/api-key", json={"api_key": f"  {key}  "})
-    assert response.status_code == 200
-    assert response.get_json() == {"ok": True, "ai_available": True}
-    assert dotenv_values(path)["GEMINI_API_KEY"] == key
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert client.get("/api/status").get_json()["ai_available"] is True
-    assert key not in client.get("/").text + response.text + caplog.text
-    assert 'class="api-key-setup" hidden' in client.get("/").text
-
-    def generate(*args, **kwargs):
-        assert os.environ["GEMINI_API_KEY"] == key
-        return {"cards": [], "mode": "ai"}
-
-    monkeypatch.setattr("flashcard_generator.web.generate_deck", generate)
-    response = client.post("/api/jobs", json={"notes": "Force is a push or pull."})
-    assert response.status_code == 202
-    client.application.extensions["generation_jobs"].executor.shutdown(wait=True)
-    assert client.get("/api/jobs/" + response.json["job_id"]).json["status"] == "completed"
-
-    # A fresh app reads the saved file without relying on the process environment.
-    monkeypatch.delenv("GEMINI_API_KEY")
-    reloaded = create_app(env_path=path).test_client()
-    assert reloaded.get("/api/status").json["ai_available"] is True
-
-
-def test_save_key_preserves_other_env_settings(client, tmp_path):
-    path = tmp_path / ".env"
-    path.write_text("# My settings\nPORT=5050\nGEMINI_API_KEY='old-key'\nGEMINI_MODEL=test-model\n")
-    response = client.post("/api/settings/api-key", json={"api_key": "replacement-key"})
-    assert response.status_code == 200
-    assert dotenv_values(path) == {
-        "PORT": "5050", "GEMINI_API_KEY": "replacement-key", "GEMINI_MODEL": "test-model"
+def test_status_reports_automatic_model_readiness(client):
+    assert client.get("/api/status").get_json() == {
+        "ok": True,
+        "ai": {
+            "available": True,
+            "model": "mrm8488/t5-base-finetuned-question-generation-ap",
+            "model_cached": False,
+            "model_loaded": False,
+            "automatic_download": True,
+        },
     }
-    assert "# My settings" in path.read_text()
-
-
-@pytest.mark.parametrize("key", [None, 123, "", "   ", "x" * 4097, "key\nPORT=9", "a b", "${SECRET}"])
-def test_invalid_key_does_not_write_or_enable(client, tmp_path, key):
-    response = client.post("/api/settings/api-key", json={"api_key": key})
-    assert response.status_code == 400
-    assert not (tmp_path / ".env").exists()
-    assert client.get("/api/status").json["ai_available"] is False
-
-
-@pytest.mark.parametrize("key", ["AQ.test-key_with.punctuation~+/=", "AQ." + "a" * 1024])
-def test_encoded_key_formats_round_trip_and_activate(client, tmp_path, monkeypatch, key):
-    response = client.post("/api/settings/api-key", json={"api_key": key})
-    assert response.status_code == 200
-    assert os.environ["GEMINI_API_KEY"] == key
-    assert dotenv_values(tmp_path / ".env")["GEMINI_API_KEY"] == key
-    assert key not in response.text + client.get("/").text
-    monkeypatch.delenv("GEMINI_API_KEY")
-    reloaded = create_app(env_path=tmp_path / ".env").test_client()
-    assert reloaded.get("/api/status").json["ai_available"] is True
-    assert os.environ["GEMINI_API_KEY"] == key
-
-
-def test_key_save_rejects_non_objects_and_cross_site_requests(client, tmp_path):
-    for payload in [[], "secret"]:
-        assert client.post("/api/settings/api-key", json=payload).status_code == 400
-    assert client.post("/api/settings/api-key", data={"api_key": "secret"}).status_code == 415
-    for headers in [{"Origin": "https://other.example"}, {"Sec-Fetch-Site": "cross-site"}]:
-        assert client.post(
-            "/api/settings/api-key", json={"api_key": "secret"}, headers=headers
-        ).status_code == 403
-    assert not (tmp_path / ".env").exists()
-
-
-def test_save_failure_keeps_previous_key_and_does_not_leak(client, tmp_path, monkeypatch, caplog):
-    key = "private-key-that-must-not-leak"
-    path = tmp_path / ".env"
-    path.write_text("PORT=5050\n")
-
-    def fail(*args):
-        raise PermissionError(key)
-
-    monkeypatch.setattr("flashcard_generator.web.set_key", fail)
-    response = client.post("/api/settings/api-key", json={"api_key": key})
-    assert response.status_code == 500
-    assert key not in response.text + caplog.text
-    assert path.read_text() == "PORT=5050\n"
-    assert client.get("/api/status").json["ai_available"] is False
 
 
 def test_generate_rejects_empty_notes(client):
@@ -131,14 +57,20 @@ def test_local_generation_api(client):
     assert payload["cards"][0]["front"] == "What is Velocity?"
 
 
-def test_missing_ai_key_never_silently_falls_back(client):
+def test_model_setup_failure_never_silently_falls_back(client, monkeypatch):
+    def failing(*_args, **_kwargs):
+        from flashcard_generator.ai import AIError
+
+        raise AIError("model_setup_failed", "Could not download or load the Hugging Face model.")
+
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", failing)
     response = client.post(
         "/api/generate",
         json={"notes": "Velocity: The rate of change of displacement.", "use_ai": True},
     )
     payload = response.get_json()
-    assert response.status_code == 400
-    assert "Gemini is not configured" in payload["error"]
+    assert response.status_code == 502
+    assert "Could not download or load" in payload["error"]
     assert "cards" not in payload
 
 
@@ -176,8 +108,6 @@ def test_local_mode_never_calls_ai(client, monkeypatch):
 
 
 def test_ai_error_does_not_leak_or_fallback(client, monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-
     def failing(*args, **kwargs):
         raise RuntimeError("secret-key-value")
 
@@ -188,15 +118,14 @@ def test_ai_error_does_not_leak_or_fallback(client, monkeypatch):
     assert "cards" not in response.get_json()
 
 
-def test_ai_is_default_even_without_key(client):
-    response = client.post("/api/jobs", json={"notes": "Force is a push or pull."})
-    assert response.status_code == 400
-    assert response.get_json()["error_code"] == "missing_key"
-    assert b'value="ai" selected' in client.get("/").data
+def test_local_ai_is_default_and_needs_no_api_key(client):
+    page = client.get("/").data
+    assert b'value="ai" selected' in page
+    assert b"T5 question model" in page
+    assert b"API key" not in page
 
 
 def test_ai_job_api_and_auto_card_limit(client, monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     received = []
 
     def generate(notes, count, **kwargs):
