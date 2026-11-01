@@ -12,6 +12,8 @@
         3. fact sentence -> cloze card or skip
 
 Bugs/Features:
+Current Timeline:
+    Add metrics system, record, measure and visualise time, token consumption, accuracy
 
 Idea: track every source passage
     Every piece of the notes gets one of two outcomes: a card, or an exclusion.
@@ -25,3 +27,4 @@ Idea: track every source passage
 
 Feature Ideas:
     Auto search youtube video for explanations on related topics (since already using gemini)
+    Model selection
