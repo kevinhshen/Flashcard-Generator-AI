@@ -10,7 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv, set_key
 from flask import Flask, jsonify, render_template, request
 
-from .ai import generate_deck, has_api_key, safe_ai_error
+from .ai import AVAILABLE_MODELS, MODEL, generate_deck, has_api_key, safe_ai_error
 from .generator import generate_local
 from .importers import MAX_FILE_BYTES, MAX_TEXT_CHARS, extract_notes
 from .jobs import JobStore
@@ -32,7 +32,21 @@ def create_app(*, env_path: Path | None = None) -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html", ai_available=has_api_key())
+        return render_template(
+            "index.html", ai_available=has_api_key(), models=AVAILABLE_MODELS, default_model=MODEL
+        )
+
+    @app.get("/about")
+    def about():
+        return render_template("about.html")
+
+    @app.get("/compare")
+    def compare():
+        return render_template("compare.html")
+
+    @app.get("/export")
+    def export():
+        return render_template("export.html")
 
     @app.get("/api/status")
     def status():
@@ -99,6 +113,9 @@ def create_app(*, env_path: Path | None = None) -> Flask:
         count = payload.get("max_cards")
         if count is not None and (type(count) is not int or not 1 <= count <= 500):
             return None, (jsonify(error="Maximum cards must be blank or a whole number from 1 to 500."), 400)
+        model = payload.get("model")
+        if model is not None and model not in AVAILABLE_MODELS:
+            return None, (jsonify(error="Unknown model. Choose one from the list."), 400)
         use_ai = payload.get("use_ai", True)
         if type(use_ai) is not bool:
             return None, (jsonify(error="use_ai must be true or false."), 400)
@@ -116,13 +133,14 @@ def create_app(*, env_path: Path | None = None) -> Flask:
                 ),
                 400,
             )
-        return (notes, count, use_ai), None
+        return (notes, count, use_ai, model), None
 
     # Main action, calls the generate_deck function
     def perform(values, progress=lambda _m: None, cancelled=lambda: False):
-        notes, count, use_ai = values
+        notes, count, use_ai, model = values
         if use_ai:
-            return generate_deck(notes, count, progress=progress, cancelled=cancelled)
+            options = {"model": model} if model else {}
+            return generate_deck(notes, count, progress=progress, cancelled=cancelled, **options)
         return {
             "cards": [card.to_dict() for card in generate_local(notes, count or 500)],
             "mode": "local",

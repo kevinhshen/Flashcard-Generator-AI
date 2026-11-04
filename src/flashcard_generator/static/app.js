@@ -3,6 +3,7 @@ const notesInput = $("#notes");
 const fileInput = $("#notes-file");
 const countInput = $("#card-count");
 const modeInput = $("#generation-mode");
+const modelInput = $("#model-select");
 const generateButton = $("#generate-button");
 const cardsContainer = $("#cards");
 const reviewScroll = $(".review-scroll");
@@ -30,6 +31,7 @@ function showNotice(message, error = false) {
 }
 function updateGenerateButton() {
   generateButton.disabled = busy || (modeInput.value === "ai" && !aiAvailable);
+  modelInput.disabled = busy || modeInput.value !== "ai";
 }
 modeInput.addEventListener("change", updateGenerateButton);
 updateGenerateButton();
@@ -179,7 +181,7 @@ async function generateCards() {
   try {
     const response = await requestJson(useAI ? "/api/jobs" : "/api/generate", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes, max_cards: countInput.value === "" ? null : Number(countInput.value), use_ai: useAI }),
+      body: JSON.stringify({ notes, max_cards: countInput.value === "" ? null : Number(countInput.value), use_ai: useAI, ...(modelInput.value && { model: modelInput.value }) }),
     });
     if (useAI) {
       jobId = response.job_id;
@@ -256,7 +258,7 @@ function renderCoverage() {
   }
 }
 
-function renderUsage(){
+function renderUsage(usage) {
   $("#usage-report").hidden = !usage;
   $("#usage-list").replaceChildren();
   if (!usage) return;

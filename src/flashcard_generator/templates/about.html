@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recall - About</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+{% include "nav.html" %}
+<div class="paper">
+
+<h1 class="title">Recall: Comparing Single-Prompt and Multi-Stage LLM Flashcard Generation</h1>
+<p class="subtitle">Research build &mdash; project description</p>
+
+<div class="abstract">
+  <b>Abstract.</b>
+  Recall turns study notes into flashcards with a large language model (LLM). This build exists to study one
+  question: is a multi-stage pipeline (fact inventory, omission audit, drafting, review, repair) worth its extra
+  cost compared with asking a model once? The intended comparison covers token consumption, estimated cost,
+  time, and accuracy. The pipeline and per-stage token counting are implemented. The single-prompt baseline,
+  cost and time measurement, accuracy evaluation, and the results pages are not yet implemented (see
+  <a href="#status">section 9</a>).
+</div>
+
+<h2 id="contents-heading">Contents</h2>
+<ol class="contents">
+  <li><a href="#question">Research question</a></li>
+  <li><a href="#approaches">Approaches compared</a></li>
+  <li><a href="#metrics">Metrics</a></li>
+  <li><a href="#variables">Control variables</a></li>
+  <li><a href="#stack">Tech stack</a></li>
+  <li><a href="#flow">How a run works</a></li>
+  <li><a href="#terms">Terminology</a></li>
+  <li><a href="#limits">Limitations</a></li>
+  <li><a href="#status">Status</a></li>
+  <li><a href="#reading">Further reading</a></li>
+</ol>
+
+<h2 id="question">1. Research question</h2>
+<p>
+  Asking an LLM for flashcards in one prompt is cheap and fast, but a single answer can skip facts, invent
+  details, or write unclear questions. Splitting the work into several checked stages may fix some of this,
+  but every stage adds requests, tokens, and waiting time. The open questions are:
+</p>
+<ol>
+  <li><b>RQ1.</b> Does the multi-stage pipeline produce more accurate and more complete cards than a single prompt?</li>
+  <li><b>RQ2.</b> What does that cost in tokens, money, and time?</li>
+  <li><b>RQ3.</b> How do the control variables (section 4) and the choice of model change the answers to RQ1 and RQ2?</li>
+</ol>
+<p>No results are claimed here. This page describes the setup, not findings.</p>
+
+<h2 id="approaches">2. Approaches compared</h2>
+<table class="data">
+  <caption>Table 1. The two approaches.</caption>
+  <tr><th></th><th>Single prompt (baseline)</th><th>Multi-stage pipeline</th></tr>
+  <tr><td>Idea</td><td>One request containing the notes and an instruction to write flashcards.</td>
+      <td>Several requests, each doing one narrow job, with later stages checking earlier ones.</td></tr>
+  <tr><td>Requests per run</td><td>1 (expected)</td><td>2 per section + 2 per batch (+1 per repaired batch)</td></tr>
+  <tr><td>Status</td><td>Not implemented</td><td>Implemented</td></tr>
+</table>
+
+<table class="data">
+  <caption>Table 2. Pipeline stages.</caption>
+  <tr><th>Stage</th><th>Runs once per</th><th>Job</th></tr>
+  <tr><td>inventory</td><td>section</td><td>List every testable fact in the section, each with an exact quote from the notes.</td></tr>
+  <tr><td>audit_inventory</td><td>section</td><td>Re-read the section and correct the list: add missed facts, remove unsupported ones.</td></tr>
+  <tr><td>draft</td><td>batch of facts</td><td>Write question/answer cards covering the facts in the batch.</td></tr>
+  <tr><td>review</td><td>batch of facts</td><td>Check each card against its facts and return the corrected batch.</td></tr>
+  <tr><td>repair</td><td>batch with gaps</td><td>One extra review-style request for facts that still have no accepted card.</td></tr>
+</table>
+<p>
+  Between stages, ordinary Python code (not the model) rejects quotes that do not appear in the source,
+  tautological or empty cards, duplicates, and conflicting answers to the same question.
+</p>
+
+<h2 id="metrics">3. Metrics</h2>
+<table class="data">
+  <caption>Table 3. What is measured, and how.</caption>
+  <tr><th>Metric</th><th>Definition</th><th>Status</th></tr>
+  <tr><td>Token consumption</td><td>Tokens reported by the Gemini API for each request, summed per stage and per run.</td>
+      <td>Recorded (one total per request); shown on the Run page.</td></tr>
+  <tr><td>Cost</td><td>Tokens &times; the published price per token for the chosen model. An estimate, not a bill.</td><td>Planned</td></tr>
+  <tr><td>Time</td><td>Wall-clock seconds per request and per run, with retry waits counted separately.</td><td>Planned</td></tr>
+  <tr><td>Accuracy</td><td>Compared with a hand-written reference: recall (key facts that got a card), precision
+      (cards that are correct), and the rate of quotes that really appear in the notes.</td><td>Planned</td></tr>
+</table>
+<p>
+  The coverage report on the Run page is not an accuracy score. It counts facts the model itself found that ended
+  up on a card, so it cannot show what the model missed or misunderstood.
+</p>
+
+<h2 id="variables">4. Control variables</h2>
+<p>
+  These settings are held fixed within a comparison and varied between experiments. Values are those in
+  <code>ai.py</code>.
+</p>
+<table class="data">
+  <caption>Table 4. Control variables and current values.</caption>
+  <tr><th>Variable</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td>CHUNK_SIZE</td><td>6,000 characters</td><td>Maximum length of one section sent for inventory and audit.</td></tr>
+  <tr><td>BATCH_SIZE</td><td>12 facts</td><td>Facts per draft/review request.</td></tr>
+  <tr><td>MODEL_TEMPERATURE</td><td>0.15</td><td>Low randomness, to reduce invented content.</td></tr>
+  <tr><td>Maximum output</td><td>16,384 tokens</td><td>Longest reply allowed for one request.</td></tr>
+  <tr><td>Request timeout</td><td>90 s</td><td>Longest wait for one request.</td></tr>
+  <tr><td>Retries</td><td>3 (after 2, 4, 8 s)</td><td>Only for temporary server errors; each retry is another request.</td></tr>
+  <tr><td>Card ceiling</td><td>1,000</td><td>Safety limit per run.</td></tr>
+  <tr><td>Model</td><td>Selectable on the Run page</td><td>Free-tier Gemini models; each has its own rate limits.</td></tr>
+</table>
+
+<h2 id="stack">5. Tech stack</h2>
+<table class="data">
+  <caption>Table 5. Technologies used.</caption>
+  <tr><th>Layer</th><th>Technology</th></tr>
+  <tr><td>Language</td><td>Python 3.10+</td></tr>
+  <tr><td>Web server</td><td>Flask (runs locally; one user)</td></tr>
+  <tr><td>LLM access</td><td>Gemini API through the <code>google-genai</code> SDK</td></tr>
+  <tr><td>Structured output</td><td>Pydantic models used as the response schema, so replies are JSON in a fixed shape</td></tr>
+  <tr><td>PDF import</td><td>pypdf (text-based PDFs only)</td></tr>
+  <tr><td>Configuration</td><td>python-dotenv; the API key lives in a gitignored <code>.env</code> file</td></tr>
+  <tr><td>Background work</td><td>Python <code>ThreadPoolExecutor</code> with one worker; jobs kept in memory</td></tr>
+  <tr><td>Front end</td><td>Plain HTML, CSS, and JavaScript; no framework</td></tr>
+  <tr><td>Testing</td><td>pytest (Python); Node's test runner with jsdom (page behavior)</td></tr>
+  <tr><td>Quality checks</td><td>ruff (lint); GitHub Actions (runs both test suites)</td></tr>
+</table>
+
+<h2 id="flow">6. How a run works</h2>
+<ol>
+  <li>The browser sends the notes, model, and options to the server.</li>
+  <li>The server starts a background job and immediately returns a job ID.</li>
+  <li>The page asks for the job's status about every 1.2 seconds and shows progress text.</li>
+  <li>The job splits the notes into sections and runs the stages in Table 2, counting tokens after each request.</li>
+  <li>When it finishes, the server stores the result (cards, coverage report, token usage) and the page displays it.</li>
+</ol>
+
+<h2 id="terms">7. Terminology</h2>
+<dl>
+  <dt>LLM</dt><dd>Large language model: a program that writes text in reply to text it is given. Here, Gemini.</dd>
+  <dt>Prompt</dt><dd>The text sent to the model, including instructions and the data to work on.</dd>
+  <dt>Token</dt><dd>The unit a model reads and writes; roughly a short word or part of a word. APIs count and price in tokens.</dd>
+  <dt>Input / output tokens</dt><dd>Tokens sent to the model versus tokens it writes back. Output usually costs more per token.</dd>
+  <dt>Thinking tokens</dt><dd>Tokens some models spend reasoning before answering; typically billed like output.</dd>
+  <dt>Single-prompt baseline</dt><dd>Generating all the flashcards in one request. The reference point for the comparison.</dd>
+  <dt>Multi-stage pipeline</dt><dd>A fixed sequence of requests in which each one does a narrow job (Table 2).</dd>
+  <dt>Section (chunk)</dt><dd>A piece of the notes up to CHUNK_SIZE characters, cut at paragraph or sentence boundaries where possible.</dd>
+  <dt>Fact inventory</dt><dd>The list of testable statements found in a section, each with an exact source quote.</dd>
+  <dt>Audit</dt><dd>A second pass over a section that corrects the fact inventory.</dd>
+  <dt>Batch</dt><dd>Up to BATCH_SIZE facts handled together in the draft and review stages.</dd>
+  <dt>Repair</dt><dd>An extra request for facts that no accepted card covers.</dd>
+  <dt>Grounding</dt><dd>Requiring a claim to point to text that really appears in the source. Here: the quote must be found in the section.</dd>
+  <dt>Coverage</dt><dd>The share of identified facts that are represented by an accepted card. It is not accuracy.</dd>
+  <dt>Hallucination</dt><dd>Model output that sounds plausible but is not supported by the source.</dd>
+  <dt>Structured output</dt><dd>Asking the model to reply in a fixed JSON shape so that code can read it reliably.</dd>
+  <dt>Temperature</dt><dd>A setting for how random the model's wording is. Lower values give steadier output.</dd>
+  <dt>Rate limit (RPM, RPD, TPM)</dt><dd>Caps on requests per minute, requests per day, and tokens per minute. The free tier's request caps are low enough to matter for a multi-stage pipeline.</dd>
+  <dt>Control variable</dt><dd>A setting kept the same during a comparison so that only the thing being studied changes.</dd>
+  <dt>Recall / precision</dt><dd>Of the facts that should be on cards, the share that are (recall); of the cards produced, the share that are correct (precision).</dd>
+</dl>
+
+<h2 id="limits">8. Limitations</h2>
+<ul>
+  <li>The model that extracts facts also reviews the cards, so errors can be correlated; a reviewer can share the writer's blind spots.</li>
+  <li>Quote matching proves that a quote exists in the notes, not that the card interprets it correctly.</li>
+  <li>The free tier's request limits can interrupt long runs, and failed or retried requests also count against them.</li>
+  <li>Scanned PDFs, diagrams, and handwriting are not supported (no OCR).</li>
+  <li>Automated tests use scripted model replies, so they check the pipeline's logic, not real-model quality.</li>
+  <li>Single-user, local app; finished jobs are kept in memory for at most 30 minutes.</li>
+</ul>
+
+<h2 id="status">9. Status</h2>
+<table class="data">
+  <caption>Table 6. Implemented and planned work.</caption>
+  <tr><th>Item</th><th>State</th></tr>
+  <tr><td>Multi-stage pipeline</td><td>Done</td></tr>
+  <tr><td>Model selection (free-tier list)</td><td>Done</td></tr>
+  <tr><td>Token counting per stage</td><td>Done (total per request)</td></tr>
+  <tr><td>Input/output token split</td><td>Planned</td></tr>
+  <tr><td>Cost estimate</td><td>Planned</td></tr>
+  <tr><td>Timing per stage and per run</td><td>Planned</td></tr>
+  <tr><td>Single-prompt baseline</td><td>Planned</td></tr>
+  <tr><td>Accuracy evaluation against reference cards</td><td>Planned</td></tr>
+  <tr><td>Compare page</td><td>Blank placeholder</td></tr>
+  <tr><td>Export page (graphs, spreadsheet-style tables)</td><td>Blank placeholder</td></tr>
+</table>
+
+<h2 id="reading">10. Further reading</h2>
+<ul>
+  <li><a href="https://ai.google.dev/gemini-api/docs">Gemini API documentation</a></li>
+  <li><a href="https://ai.google.dev/gemini-api/docs/pricing">Gemini API pricing</a></li>
+  <li><a href="https://ai.google.dev/gemini-api/docs/rate-limits">Gemini API rate limits</a></li>
+</ul>
+
+</div>
+</body>
+</html>
