@@ -118,6 +118,7 @@ def create_app(*, env_path: Path | None = None) -> Flask:
             )
         return (notes, count, use_ai), None
 
+    # Main action, calls the generate_deck function
     def perform(values, progress=lambda _m: None, cancelled=lambda: False):
         notes, count, use_ai = values
         if use_ai:

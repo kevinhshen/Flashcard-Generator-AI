@@ -224,6 +224,7 @@ async function followJob() {
 function applyResult(data) {
   coverage = data.coverage || null;
   renderCoverage();
+  renderUsage(data.usage);
   if (!data.cards?.length) {
     showNotice((data.warning || "No supported cards found.") + " The visible deck is unchanged; coverage refers to this new attempt.");
     return;
@@ -254,6 +255,20 @@ function renderCoverage() {
     $("#coverage-gaps").append(li);
   }
 }
+
+function renderUsage(){
+  $("#usage-report").hidden = !usage;
+  $("#usage-list").replaceChildren();
+  if (!usage) return;
+  $("#usage-summary").textContent = "Token usage · " + usage.Total.toLocaleString() + " total";
+  for (const [stage, tokens] of Object.entries(usage)) {
+    if (stage === "Total") continue;
+    const li = document.createElement("li");
+    li.textContent = stage + ": " + tokens.toLocaleString();
+    $("#usage-list").append(li);
+  }
+}
+
 function markCoverageEdited() {
   if (coverage) $("#coverage-state").textContent = "Deck edited. Coverage counts describe the original generated deck and are now stale.";
 }
