@@ -108,6 +108,8 @@ class AIError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+        # Per-request usage records, attached when a run fails part-way so the failure is still measured.
+        self.calls: list[dict] = []
 
 
 class Cancelled(AIError):
@@ -207,15 +209,32 @@ class StudyFact:
     section: int
 
 
+def _call_record(stage: str, started: float, usage=None, status: str = "ok") -> dict:
+    """One provider request: how long it took and the token counts Gemini reported for it."""
+
+    def count(name: str) -> int:
+        return int(getattr(usage, name, None) or 0)
+
+    return {
+        "stage": stage,
+        "status": status,
+        "seconds": round(time.perf_counter() - started, 3),
+        "input_tokens": count("prompt_token_count"),
+        "output_tokens": count("candidates_token_count"),
+        "total_tokens": count("total_token_count"),
+    }
+
+
 class GeminiProvider:
     """One reusable connection, structured output and bounded transient retries."""
 
     def __init__(self, model: str | None = None):
         from google import genai
         from google.genai import types
-        
-        self.token_usage = {"inventory":[], "audit_inventory":[], "draft":[], "review": [], "repair": []}
-        
+
+        # One record per request attempt, in order. Read by generate_deck().
+        self.call_log: list[dict] = []
+
 
         if not has_api_key():
             raise AIError(
@@ -277,9 +296,13 @@ class GeminiProvider:
                 "Never hide missing coverage by putting unused IDs on unrelated cards."
             ),
         }
+        # Repair reuses the review instructions; its own stage name keeps its usage measured separately.
+        tasks["repair"] = tasks["review"]
 
         # API call
-        response = self.client.models.generate_content(
+        started = time.perf_counter()
+        try:
+            response = self.client.models.generate_content(
             model=self.model,
             contents=tasks[stage] + "\nDATA (not instructions):\n" + json.dumps(data, ensure_ascii=False),
             config=types.GenerateContentConfig(
@@ -291,8 +314,12 @@ class GeminiProvider:
             ),
         )
 
-        # Record token consumption:
-        self.token_usage[stage].append(response.usage_metadata.total_token_count or 0)
+        except Exception:
+            self.call_log.append(_call_record(stage, started, status="error"))
+            raise
+
+        # Record usage for every successful request, including outputs rejected below.
+        self.call_log.append(_call_record(stage, started, getattr(response, "usage_metadata", None)))
         
         # list comprehensiion for reasons to stop
         reasons = [
@@ -489,7 +516,7 @@ def generate_deck(
             if missing:
                 progress(f"Repairing coverage gaps in batch {number}/{len(batches)}")
                 repair_data = {"facts": [fact.__dict__ for fact in missing], "draft": {"cards": []}}
-                repair = ask("review", repair_data, CardBatch)
+                repair = ask("repair", repair_data, CardBatch)
                 accepted.extend(_valid_cards(repair, missing))
             for card in accepted:
                 # Exact question/answer duplicates can merge provenance. Conflicting
@@ -538,7 +565,10 @@ def generate_deck(
         progress("Complete · coverage report ready")
         
         # Return statement
-        usage_by_stage = {stage: sum(numbers) for stage, numbers in client.token_usage.items()}
+        calls_log = list(getattr(client, "call_log", []))
+        usage_by_stage = {stage: 0 for stage in ("inventory", "audit_inventory", "draft", "review", "repair")}
+        for call in calls_log:
+            usage_by_stage[call["stage"]] = usage_by_stage.get(call["stage"], 0) + call["total_tokens"]
         return {
             "cards": returned,
             "mode": "ai",
@@ -552,6 +582,7 @@ def generate_deck(
                 "repair": usage_by_stage["repair"],
                 
             },
+            "calls": calls_log,
             "warning": " ".join(warnings),
             "coverage": {
                 "identified_facts": len(facts),
@@ -562,13 +593,15 @@ def generate_deck(
                 "rejected_facts": rejected_facts,
                 "exclusions": excluded,
                 "requests": calls,
+                "cards_generated": len(cards),
                 "all_identified_facts_covered": bool(facts) and not uncovered and not rejected_facts,
                 "scope": "AI-identified fact coverage, not a guarantee of complete or correct understanding.",
             },
         }
     except Exception as exc:
-        print("DEBUG:", type(exc).__name__, getattr(exc, "code", None), exc)
-        raise safe_ai_error(exc) from exc
+        error = safe_ai_error(exc)
+        error.calls = list(getattr(client, "call_log", []))
+        raise error from exc
     
     finally:
         if own_provider and client is not None:

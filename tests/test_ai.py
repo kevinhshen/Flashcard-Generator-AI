@@ -1,3 +1,4 @@
+import json
 from threading import Event
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -7,6 +8,7 @@ import pytest
 from flashcard_generator.ai import (
     AIError,
     Cancelled,
+    CardBatch,
     GeminiProvider,
     Inventory,
     generate_deck,
@@ -133,16 +135,17 @@ def test_unlocatable_source_is_reported_and_not_generated():
 
 
 def test_failed_review_does_not_accept_draft_and_repairs_are_bounded():
-    provider = Provider(lambda stage, data: {"cards": []} if stage == "review" else None)
+    provider = Provider(lambda stage, data: {"cards": []} if stage in {"review", "repair"} else None)
     result = generate_deck(NOTES, provider=provider)
     assert result["cards"] == []
     assert len(result["coverage"]["uncovered"]) == 2
-    assert [s for s, _ in provider.calls].count("review") == 2
+    stages = [s for s, _ in provider.calls]
+    assert (stages.count("review"), stages.count("repair")) == (1, 1)
 
 
 def test_unknown_ids_and_tautologies_do_not_claim_coverage():
     def invalid(stage, data):
-        if stage == "review":
+        if stage in {"review", "repair"}:
             return {
                 "cards": [
                     {"front": "Invalid provenance?", "back": "one byte", "fact_ids": ["invented"]},
@@ -188,8 +191,26 @@ def test_missing_reviewed_fact_gets_targeted_repair():
     provider = Provider(omission)
     result = generate_deck(NOTES, provider=provider)
     assert result["coverage"]["all_identified_facts_covered"]
+    assert provider.calls[-1][0] == "repair"
     assert len(provider.calls[-1][1]["facts"]) == 1
     assert provider.calls[-1][1]["facts"][0]["text"] == FACTS[1]["text"]
+
+
+def test_repair_uses_review_instructions_but_is_measured_separately(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    fake = MagicMock()
+    usage = SimpleNamespace(prompt_token_count=10, candidates_token_count=5, total_token_count=15)
+    fake.models.generate_content.return_value = SimpleNamespace(
+        parsed=CardBatch(cards=[]), candidates=[], usage_metadata=usage
+    )
+    monkeypatch.setattr("google.genai.Client", MagicMock(return_value=fake))
+    provider = GeminiProvider()
+    provider.ask("review", {"facts": []}, CardBatch)
+    provider.ask("repair", {"facts": []}, CardBatch)
+    provider.close()
+    review, repair = fake.models.generate_content.call_args_list
+    assert review.kwargs["contents"] == repair.kwargs["contents"]
+    assert [call["stage"] for call in provider.call_log] == ["review", "repair"]
 
 
 @pytest.mark.parametrize(
@@ -320,3 +341,72 @@ def test_background_job_progress_concurrency_and_cancellation():
     assert store.get(key)["status"] == "cancelled"
     assert "result" not in store.get(key)
     assert store.get("unknown") is None
+
+
+def test_pipeline_totals_add_up_across_every_request(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    fake = MagicMock()
+
+    def respond(model, contents, config):
+        usage = SimpleNamespace(prompt_token_count=10, candidates_token_count=5, total_token_count=15)
+        if contents.startswith("Read the entire section"):
+            parsed = Inventory.model_validate({"facts": FACTS[:1]})
+        elif contents.startswith("Independently audit"):
+            parsed = Inventory.model_validate({"facts": FACTS})
+        else:  # draft and review: one card per fact ID supplied in DATA
+            data = json.loads(contents.split("DATA (not instructions):\n", 1)[1])
+            parsed = CardBatch.model_validate({"cards": [
+                {"front": "Which fact is tested by " + fact["id"] + "?", "back": fact["text"],
+                 "fact_ids": [fact["id"]]}
+                for fact in data["facts"]
+            ]})
+        return SimpleNamespace(parsed=parsed, candidates=[], usage_metadata=usage)
+
+    fake.models.generate_content.side_effect = respond
+    monkeypatch.setattr("google.genai.Client", MagicMock(return_value=fake))
+    provider = GeminiProvider()
+    result = generate_deck(NOTES, provider=provider)
+    provider.close()
+
+    assert [call["stage"] for call in result["calls"]] == ["inventory", "audit_inventory", "draft", "review"]
+    assert result["usage"]["Total"] == 60
+    assert result["usage"]["draft"] == 15
+    assert result["coverage"]["requests"] == 4
+    assert result["coverage"]["cards_generated"] == 2
+
+
+def test_each_request_records_time_and_reported_tokens(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    fake = MagicMock()
+    usage = SimpleNamespace(prompt_token_count=30, candidates_token_count=12, total_token_count=50)
+    fake.models.generate_content.return_value = SimpleNamespace(
+        parsed=Inventory(facts=[]), candidates=[], usage_metadata=usage
+    )
+    monkeypatch.setattr("google.genai.Client", MagicMock(return_value=fake))
+    provider = GeminiProvider()
+    provider.ask("inventory", {"owned_section": NOTES}, Inventory)
+    [call] = provider.call_log
+    assert call["stage"] == "inventory" and call["status"] == "ok"
+    assert (call["input_tokens"], call["output_tokens"], call["total_tokens"]) == (30, 12, 50)
+    assert call["seconds"] >= 0
+
+    fake.models.generate_content.side_effect = RuntimeError("private response")
+    with pytest.raises(RuntimeError):
+        provider.ask("draft", {"facts": []}, Inventory)
+    assert provider.call_log[-1]["status"] == "error"
+    assert provider.call_log[-1]["total_tokens"] == 0
+    provider.close()
+
+
+def test_failed_run_carries_the_requests_made_before_the_failure():
+    def fail(stage, data):
+        if stage == "audit_inventory":
+            raise TimeoutError("private notes")
+
+    provider = Provider(fail)
+    provider.call_log = [{"stage": "inventory", "status": "ok", "seconds": 0.1,
+                          "input_tokens": 1, "output_tokens": 1, "total_tokens": 2}]
+    with pytest.raises(AIError) as failure:
+        generate_deck(NOTES, provider=provider)
+    assert failure.value.code == "timeout"
+    assert [call["stage"] for call in failure.value.calls] == ["inventory"]

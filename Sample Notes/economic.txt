@@ -1,0 +1,76 @@
+01
+What the PPC shows
+The production possibility curve shows the maximum combinations of two goods an economy can produce when its resources are fully and efficiently used, given current technology.
+
+Definition
+The production possibility curve (PPC) shows the maximum attainable combinations of two goods that an economy can produce when all its resources are fully and efficiently employed, with technology held constant.
+
+The PPC is the visual model of the central economic problem. The frontier itself shows scarcity: only points on or inside it are attainable, so an economy cannot have unlimited amounts of both goods. Any point on the frontier requires a choice between the two goods, and the downward slope shows opportunity cost: more of one good means less of the other. Note that this page carries no PPC diagram, because ETG's diagram set does not yet include one; the reasoning below is followed from the description.
+
+02
+Points on, inside and outside
+Where a point sits relative to the curve tells you whether the economy is efficient, under using its resources, or aiming beyond what is currently possible.
+
+On the curve. The economy is at full employment, using all its resources fully and in the best way. This point is productively efficient.
+Inside the curve. Some resources are idle or unemployed, so the economy is under utilising its capacity. It could produce more of both goods. A move from an interior point toward the frontier is actual growth, fuller use of existing capacity.
+Outside the curve. Unattainable with current resources and technology. It only becomes reachable if the curve itself shifts outward.
+Want this on paper? Grab the free 112 page Summary and Diagrams pack.
+
+03
+Opportunity cost as the slope
+Moving along the curve from one combination to another means giving up some of one good to gain more of the other, and that trade off is the opportunity cost, read off the slope.
+
+Suppose an economy produces cars and computers. To make one more car, it must move resources away from computers, so it gives up some computers. The number of computers sacrificed for each extra car is the opportunity cost of that car, and it is exactly what the slope of the curve measures at that point. This is why the PPC is the cleanest way to see opportunity cost: the trade off is built into the geometry of the curve.
+
+04
+Why the curve is bowed out
+The PPC is concave to the origin, that is bowed out, because of increasing opportunity cost: as ever more resources are switched to one good, ever larger amounts of the other must be given up.
+
+Resources are not equally suited to producing both goods. As an economy reallocates more and more resources toward, say, cars, it has to start using resources that are better suited to making computers, so each extra car costs more computers than the last. The slope steepens along the curve, and that steepening is the visual signature of increasing opportunity cost. A straight line PPC would imply constant opportunity cost, which only holds if resources are perfectly substitutable between the two goods, which they rarely are.
+
+Key point
+The bowed out shape is not decoration. It carries a claim: resources are imperfectly substitutable, so opportunity cost rises as you specialise further in one good.
+
+05
+Shifts: economic growth
+When productive capacity changes, the whole curve shifts, and that shift is potential growth, distinct from a move toward an unchanged frontier.
+
+An outward shift represents an increase in productive capacity, or potential growth, from more or better resources: a growing or more skilled labour force, more capital, better technology. An inward shift represents reduced capacity, for example from a falling or ageing labour force, which lowers the attainable frontier itself. The key distinction examiners reward is between potential growth (a shift of the curve) and actual growth (a movement from an interior point toward the frontier using existing resources). Mixing them up, for instance shifting the curve outward when a shrinking labour force should shift it inward, is a common and costly error.
+
+Exam tip
+A shrinking labour force shifts the PPC inward, lowering potential output. It is a shift of the frontier, not a movement along it. Tie the direction of the shift to what is happening to the quantity or quality of resources.
+
+06
+Productive and allocative efficiency
+The PPC shows productive efficiency directly, while allocative efficiency is about which point on the curve society should choose.
+
+Productive efficiency means producing at the lowest possible cost with all resources fully used, so it is any point on the curve rather than inside it. Allocative efficiency goes further: it is the single point on the curve that produces the mix of goods society most values, the right goods in the right amounts. So every point on the frontier is productively efficient, but only one of them is allocatively efficient. The PPC shows the first cleanly; the second depends on society's preferences and is where allocative efficiency and the wider study of markets pick up.
+
+Watch out
+Do not treat every point on the curve as the "best" outcome. Each point on the frontier is productively efficient, but only one mix is allocatively efficient. And do not confuse a movement along the curve (actual growth) with a shift of the whole curve (potential growth); the two are different events with different causes.
+
+07
+Test yourself
+Test yourself
+Using the idea of a point inside the curve, explain what under utilisation of resources means and how the economy could reach the frontier.
+Explain why the PPC is bowed out rather than a straight line.
+A country's working age population is shrinking. State and explain the effect on its PPC, and say whether this is actual or potential growth.
+Key terms on this page
+
+Production possibility curve
+Opportunity cost
+Productive efficiency
+Allocative efficiency
+Potential growth
+Actual growth
+
+08
+Questions students ask
+What does the production possibility curve show?
++
+
+What is the difference between a point inside and a point on the PPC?
++
+
+What does a shift in the PPC represent?
++

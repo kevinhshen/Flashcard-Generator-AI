@@ -223,10 +223,30 @@ async function followJob() {
     await new Promise(resolve => setTimeout(resolve, 1200));
   }
 }
+function renderMetrics(metrics) {
+  const line = $("#run-metrics");
+  line.hidden = !metrics;
+  if (!metrics) return;
+  const value = (number, suffix = "") => number == null ? "n/a" : number + suffix;
+  const coverageText = metrics.coverage_pct == null ? "n/a"
+    : metrics.coverage_pct + "% (" + metrics.covered_facts + "/" + metrics.identified_facts + ")";
+  line.textContent = [
+    "Time " + value(metrics.duration_s, " s"),
+    "Tokens " + value(metrics.total_tokens),
+    "Requests " + value(metrics.requests),
+    "Coverage " + coverageText,
+    "Source-verified " + value(metrics.source_verified_pct, "%"),
+    "Tokens/card " + value(metrics.tokens_per_card),
+    "Seconds/card " + value(metrics.seconds_per_card),
+    metrics.run_id ? "Saved run " + metrics.run_id.slice(0, 8) : "Not saved (storage error)",
+  ].join(" · ");
+}
+
 function applyResult(data) {
   coverage = data.coverage || null;
   renderCoverage();
   renderUsage(data.usage);
+  renderMetrics(data.metrics);
   if (!data.cards?.length) {
     showNotice((data.warning || "No supported cards found.") + " The visible deck is unchanged; coverage refers to this new attempt.");
     return;

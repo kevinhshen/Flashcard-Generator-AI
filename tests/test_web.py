@@ -1,9 +1,14 @@
 import os
 import stat
+from contextlib import closing
+from io import BytesIO
 
 import pytest
 from dotenv import dotenv_values
+from openpyxl import load_workbook
 
+from flashcard_generator import storage
+from flashcard_generator.ai import AIError
 from flashcard_generator.web import create_app
 
 
@@ -193,6 +198,40 @@ def test_ai_is_default_even_without_key(client):
     assert response.status_code == 400
     assert response.get_json()["error_code"] == "missing_key"
     assert b'value="ai" selected' in client.get("/").data
+
+
+def test_generation_is_saved_and_export_downloads_a_workbook(client):
+    response = client.post(
+        "/api/generate",
+        json={"notes": "Velocity: The rate of change of displacement.", "use_ai": False},
+    )
+    payload = response.get_json()
+    assert payload["run_id"]
+    assert payload["metrics"]["run_id"] == payload["run_id"]
+    assert payload["metrics"]["card_count"] == len(payload["cards"])
+    assert "calls" not in payload  # internal bookkeeping stays out of the page response
+
+    export = client.get("/api/export.xlsx")
+    assert export.status_code == 200
+    assert export.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment" in export.headers["Content-Disposition"]
+    assert load_workbook(BytesIO(export.data))["runs"].max_row == 2
+    assert "Saved runs: 1" in client.get("/export").text
+
+
+def test_failed_ai_job_is_saved_with_its_error_code(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    def failing(notes, count, **kwargs):
+        raise AIError("quota", "Gemini quota/rate limit reached.")
+
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", failing)
+    key = client.post("/api/jobs", json={"notes": "Force is a push or pull."}).get_json()["job_id"]
+    client.application.extensions["generation_jobs"].executor.shutdown(wait=True)
+    assert client.get("/api/jobs/" + key).get_json()["status"] == "failed"
+    conn = storage.connect()
+    with closing(conn):
+        assert conn.execute("SELECT status, error_code FROM runs").fetchall() == [("failed", "quota")]
 
 
 def test_ai_job_api_and_auto_card_limit(client, monkeypatch):

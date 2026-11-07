@@ -1,0 +1,66 @@
+What is a Circadian Rhythm?
+Circadian rhythm, or molecular clock, is the cyclic 24-hour regulation of physiological balance in an organism. 
+
+In mammals, it exists in the brain and regulates the cycle of alertness and sleepiness by responding to light changes in our environment. 
+The clock coordinates the interplay of several physiological processes to establish a healthy molecular process. 
+In 2017, Jeffrey C. Hall and his colleagues were awarded the Nobel Prize in Physiology or Medicine for discovering molecular mechanisms controlling the circadian rhythm. 
+Circadian Rhythm Overview
+Circadian Rhythm Overview
+Location of Circadian Rhythm
+The circadian rhythm is maintained and generated in the suprachiasmatic nucleus (SCN) of the hypothalamus. This region is also known as the circadian pacemaker.
+This region sends signals and synchronizes other peripheral clocks in peripheral tissues such as the kidney, skin, lung, pancreas, ovary, and heart. 
+This is achieved via the circadian output pathways, the autonomic nervous system, and the neuroendocrine system.
+Components of Circadian Rhythm 
+The circadian rhythm functions with four main components:
+
+Photosensitive retinal neurons and the retino-hypothalamic tract in the eyes detect light signals coming from the environment
+The internal circadian oscillator generates a periodic rhythm within the organism, synchronizing it with the environment
+Signal paths transmit information from the central regulator (SCN) to other peripheral regulators.
+Peripheral rhythm generators (clock genes and proteins) are associated with almost all cells within the organism. 
+Components of Circadian Rhythm
+Components of Circadian Rhythm
+Molecular Mechanism of the Circadian Clock 
+Several genes are activated and inactivated based on the temporal needs of the body. 
+The circadian clock is maintained by an autoregulatory network of positive (CLOCK/BMAL1) and negative (Cryptochrome (CRY) and Period (PER)) feedback regulators. This maintains the daily temporal homeostasis in an organism. 
+These two regulators impact cell cycle, DNA repair, apoptosis, and metabolic regulation. 
+The positive regulators, CLOCK/BMAL1 heterodimers, govern the expression of core negative clock genes (CGGs) such as CRY1, CRY2, PER1, PER2, and PER3. 
+CRY and PER form a transcriptional repressor complex that enters the nucleus to inhibit the activity of CLOCK/BMAL1. This establishes a negative feedback loop for regulating the clock.
+Additionally, the heterodimers also regulate the expression of other clock—controlled genes, such as RORA and Rev-erb, which in turn modulate BMAL1 expression.
+The post-translational modifications of CRY and PER also regulate protein stability, control the nuclear entry of CRY/PER repressors, and impact the autoregulatory clock feedback loops. 
+This autoregulatory network, with positive and negative transcription-translation feedback loops, establishes the daily rhythmicity of the circadian rhythm. 
+Molecular Mechanism of the Circadian Clock System
+Molecular Mechanism of the Circadian Clock System. Source: Zeng et al., 2024
+Significance of Circadian Rhythm
+The molecular clock enables organisms to prepare and adapt to environmental factors such as light and food. 
+This cyclic molecular machinery regulates and coordinates internal physiological processes such as hormone regulation, appetite, digestion, body temperature, etc.
+Hormones such as cortisol and melatonin increase and decrease periodically with the day-and-night cycle. The melatonin hormone is responsible for sleepiness, and cortisol for alertness. 
+Hunger and metabolic processes are periodically regulated in the hypothalamus through neuronal signals. The intrinsic hunger signal peaks in the evening to support the natural overnight fasting period, whereas a lower appetite occurs in the morning near the habitual wake-up time.
+The body temperature can fluctuate through the wake and sleep cycles by about 1 °C, with sinusoidal fluctuations. The temperature normally drops before sleeping, helping to rest, and rises in the morning, promoting alertness and wakefulness. 
+In plants, the circadian rhythm notifies them of the season and when flowering is better to attract pollinators. In birds, the biological clock controls the timing of migration and reproductive behavior. Moths and butterflies depend on their circadian rhythm on their antenna to secrete pheromone and attract their partners at night.
+Variation of Melatonin and Cortisol Levels in the Sleep-Wake Cycle
+Variation of Melatonin and Cortisol Levels in the Sleep-Wake Cycle. Source: Sato, 2022
+Circadian Disruption
+The disruption of the circadian rhythm can impede the functioning of a healthy body, causing the onset of numerous chronic diseases, including cancer. Several environmental factors, such as night-shift work, exposure to artificial light, and an irregular diet, alter the circadian rhythm.
+
+Occurrence of Circadian disruption
+Circadian disruption can occur in the following ways:
+
+Change in day-and-night cycle: The irregularity of day and night after traveling to a varying time zone can disrupt the sleep pattern. This causes fatigue, insomnia, and disorientation, a condition known as jet lag. 
+Artificial lighting: The persistent use of mobile phones, laptops, TV screens, or indoor lighting late at night can give a false sense of sunlight to the body. This hampers the circadian clock. Moreover, the lack of exposure to natural light during the day also poses a risk 
+Drug abuse: Individuals who abuse drugs negatively affect the central circadian pacemaker. Sleep patterns can be disrupted by the continuous use of drugs and alcohol. The chronic use of caffeine keeps the body on alert regardless of the time, which obstructs the periodic circadian rhythm. 
+Irregular diet: A healthy and regular diet helps to maintain a stable circadian rhythm. 
+The circadian genes, such as the PER (Period) family genes, circadian locomotor output cycle kaput (CLOCK), and cytochrome circadian clock 2 (CRY2), are negatively affected by insufficient sleep. 
+
+Risk of Circadian Disruption
+Age: Newborn babies do not have a fully developed circadian rhythm and tend to fall asleep when tired. Teens and young adults may naturally develop late sleeping habits, disrupting their biological clocks. In contrast, older adults tire easily and often feel sleepy early in the evening, waking up early in the morning. They may also experience reduced melatonin production and fragmented sleep.
+Genetics: Circadian rhythm is regulated by an internal molecular clock involving clock genes such as CLOCK, BMAL1, PER, and CRY. Variation in these genes can result in irregular sleep-wake patterns. Some individuals may also be genetically programmed to wake up late or sleep early.
+Environment/Occupation: Individuals who work late at night with extensive exposure to artificial light have reduced melatonin production. Night shift workers, frequent travelers, and flight attendants are at high risk of circadian rhythm disruption due to their irregular schedules and time zone variation.
+Consequences of Circadian Disruption
+Disruption of the circadian rhythm can detrimentally affect both physical and mental health. They are as follows:
+
+Sleep disorders: Sleep disorders such as insomnia, delayed sleep, excessive daytime sleepiness, and others can result from irregularities in the biological clock. 
+Metabolic and hormonal imbalance: Hormones such as insulin, leptin, and ghrelin are also regulated by the circadian rhythm. Because of this reason, irregular eating, especially late at night, can cause problems in metabolism with an increased risk of obesity and type 2 diabetes.
+Cognitive Effects and Mental Disorders: Circadian misalignment leads to reduced cognitive function, including increased rates of stress, impaired visual performance, and an overall decrease in work efficiency. Chronic night shift workers face a higher risk of dementia compared to day workers. Similarly, this disruption affects brain function, influencing mood and behavior, which are associated with declining mental health. 
+Cardiovascular diseases: Individuals with circadian disruption may also experience higher blood pressure and increased heart rate variation. This increases the risk of stroke, heart disease, and hypertension. 
+Immune dysfunction: Research indicates that circadian disruption interferes with all types of immune cells, such as T-lymphocytes, B-lymphocytes, macrophages, dendritic cells, and natural killer (NK) cells. Thus, the body can have a reduced response to infection and take more time to recover from the disease. 
+Cancer: The World Health Organization (WHO) has recognized the disruption of circadian rhythm as a probable carcinogen. Cancer can occur by the disruption of the regular cell cycle, DNA repair mechanism, apoptosis, and cell signaling. These processes are closely regulated by circadian genes, which, when disrupted, can promote tumor development and uncontrolled cell growth. 

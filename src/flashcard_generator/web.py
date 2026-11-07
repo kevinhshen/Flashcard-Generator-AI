@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
+import io
 import os
+import sqlite3
 import threading
+import time
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
-from .ai import AVAILABLE_MODELS, MODEL, generate_deck, has_api_key, safe_ai_error
+from . import storage
+from .ai import AVAILABLE_MODELS, MODEL, Cancelled, generate_deck, has_api_key, safe_ai_error
 from .generator import generate_local
 from .importers import MAX_FILE_BYTES, MAX_TEXT_CHARS, extract_notes
 from .jobs import JobStore
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def create_app(*, env_path: Path | None = None) -> Flask:
@@ -46,7 +53,40 @@ def create_app(*, env_path: Path | None = None) -> Flask:
 
     @app.get("/export")
     def export():
-        return render_template("export.html")
+        try:
+            runs, database = storage.run_count(), str(storage.db_path())
+        except (OSError, sqlite3.Error):
+            runs, database = None, None
+        return render_template("export.html", runs=runs, database=database)
+
+    @app.get("/api/export.xlsx")
+    def export_xlsx():
+        try:
+            data = storage.export_workbook()
+        except (OSError, sqlite3.Error):
+            return jsonify(error="Could not read the research database."), 500
+        return send_file(
+            io.BytesIO(data),
+            mimetype=XLSX_MIME,
+            as_attachment=True,
+            download_name=f"recall-research-{datetime.now():%Y-%m-%d}.xlsx",
+        )
+
+    @app.get("/api/export.csv")
+    def export_csv_file():
+        table = request.args.get("table", "runs")
+        if table not in storage.EXPORT_QUERIES:
+            return jsonify(error="Unknown table."), 404
+        try:
+            data = storage.export_csv(table)
+        except (OSError, sqlite3.Error):
+            return jsonify(error="Could not read the research database."), 500
+        return send_file(
+            io.BytesIO(data),
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=f"recall-{table}-{datetime.now():%Y-%m-%d}.csv",
+        )
 
     @app.get("/api/status")
     def status():
@@ -135,8 +175,7 @@ def create_app(*, env_path: Path | None = None) -> Flask:
             )
         return (notes, count, use_ai, model), None
 
-    # Main action, calls the generate_deck function
-    def perform(values, progress=lambda _m: None, cancelled=lambda: False):
+    def generate_once(values, progress, cancelled):
         notes, count, use_ai, model = values
         if use_ai:
             options = {"model": model} if model else {}
@@ -147,6 +186,35 @@ def create_app(*, env_path: Path | None = None) -> Flask:
             "model": None,
             "warning": "Local rules only: no AI review or coverage audit. Some material may be skipped.",
         }
+
+    # Main action. Every run is saved (completed, failed or cancelled) before its result is returned.
+    # A storage problem never changes the result: save_run() logs it and returns None.
+    def perform(values, progress=lambda _m: None, cancelled=lambda: False):
+        notes, count, use_ai, model = values
+        started = time.perf_counter()
+        requested = (model or os.getenv("GEMINI_MODEL", MODEL)) if use_ai else None
+        result = None
+        try:
+            result = generate_once(values, progress, cancelled)
+            if cancelled():  # cancelled during the final request: the job will report cancelled too
+                raise Cancelled()
+        except Exception as exc:
+            safe = safe_ai_error(exc)
+            storage.save_run(
+                notes=notes, result=None, mode="ai" if use_ai else "local", model=requested,
+                status="cancelled" if safe.code == "cancelled" else "failed", error_code=safe.code,
+                card_limit=count, duration_s=time.perf_counter() - started,
+                calls=getattr(safe, "calls", None) or (result or {}).get("calls", []),
+            )
+            raise
+        calls = result.pop("calls", [])
+        row = storage.save_run(
+            notes=notes, result=result, mode=result.get("mode"), model=requested, status="completed",
+            error_code=None, card_limit=count, duration_s=time.perf_counter() - started, calls=calls,
+        )
+        result["run_id"] = row["run_id"] if row else None
+        result["metrics"] = storage.summary(row)
+        return result
 
     @app.post("/api/generate")
     def generate():

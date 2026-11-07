@@ -234,3 +234,17 @@ test("request timeout restores controls and preserves manual cards", async () =>
   assert.match($("#notice").textContent, /timed out/);
   dom.window.close();
 });
+
+test("run metrics line shows time, tokens, coverage and whether the run was saved", async () => {
+  const metrics = {run_id:"abcdef1234567890", duration_s:4.2, total_tokens:280, requests:2, identified_facts:4,
+    covered_facts:3, coverage_pct:75, source_verified_pct:75, card_count:1, tokens_per_card:280, seconds_per_card:4.2};
+  const {dom,$} = app({fetch:async () => ({ok:true,json:async()=>({cards:[card],mode:"local",metrics})})});
+  assert.equal($("#run-metrics").hidden, true);
+  $("#notes").value = "Force: A push or pull.";
+  $("#generate-button").click();
+  await tick();
+  assert.equal($("#run-metrics").hidden, false);
+  assert.match($("#run-metrics").textContent, /Time 4\.2 s · Tokens 280 · Requests 2 · Coverage 75% \(3\/4\)/);
+  assert.match($("#run-metrics").textContent, /Saved run abcdef12/);
+  dom.window.close();
+});
