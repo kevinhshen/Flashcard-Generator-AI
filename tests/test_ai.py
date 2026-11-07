@@ -6,12 +6,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from flashcard_generator.ai import (
+    BATCH_SIZE,
+    CHUNK_SIZE,
+    MODEL_TEMPERATURE,
+    STAGE_TASKS,
     AIError,
     Cancelled,
     CardBatch,
     GeminiProvider,
     Inventory,
     generate_deck,
+    prompt_fingerprint,
     safe_ai_error,
     split_source,
 )
@@ -410,3 +415,161 @@ def test_failed_run_carries_the_requests_made_before_the_failure():
         generate_deck(NOTES, provider=provider)
     assert failure.value.code == "timeout"
     assert [call["stage"] for call in failure.value.calls] == ["inventory"]
+
+
+def test_failed_run_keeps_the_stage_counts_it_reached():
+    def fail(stage, data):
+        if stage == "draft":
+            raise TimeoutError("private notes")
+
+    with pytest.raises(AIError) as failure:
+        generate_deck(NOTES, provider=Provider(fail))
+    assert failure.value.stats["facts_inventoried"] == 1
+    assert failure.value.stats["facts_added_by_audit"] == 1
+    assert failure.value.stats["cards_drafted"] == 0
+
+
+def outcomes(result):
+    return sorted(fact["outcome"] for fact in result["facts"])
+
+
+def test_stats_record_settings_and_what_each_stage_did():
+    result = generate_deck(NOTES, provider=Provider())
+    stats = result["stats"]
+    assert (stats["chunk_size"], stats["batch_size"]) == (CHUNK_SIZE, BATCH_SIZE)
+    assert stats["temperature"] == MODEL_TEMPERATURE
+    assert stats["prompt_sha256"] == prompt_fingerprint()
+    assert stats["facts_inventoried"] == 1
+    assert stats["facts_added_by_audit"] == 1
+    assert stats["facts_removed_by_audit"] == 0
+    assert (stats["cards_drafted"], stats["cards_reviewed"]) == (2, 2)
+    assert (stats["cards_failed_checks"], stats["repair_requests"]) == (0, 0)
+    assert outcomes(result) == ["covered", "covered"]
+
+
+def test_audit_removal_is_counted_and_the_fact_is_kept_for_inspection():
+    def misread(stage, data):
+        if stage == "inventory":
+            return {"facts": [{"text": "One address stores four bytes.", "source": NOTES}]}
+
+    result = generate_deck(NOTES, provider=Provider(misread))
+    assert result["stats"]["facts_removed_by_audit"] == 1
+    assert result["stats"]["facts_added_by_audit"] == 2
+    assert outcomes(result) == ["audit_removed", "covered", "covered"]
+    [removed] = [fact for fact in result["facts"] if fact["outcome"] == "audit_removed"]
+    assert removed["text"] == "One address stores four bytes."
+    assert removed["fact_id"] is None
+
+
+def test_quote_outside_the_notes_is_recorded_as_not_found():
+    def unsupported(stage, data):
+        if stage == "audit_inventory":
+            return {"facts": FACTS + [{"text": "Invented claim", "source": "Not in notes"}]}
+
+    result = generate_deck(NOTES, provider=Provider(unsupported))
+    assert outcomes(result) == ["covered", "covered", "quote_not_found"]
+
+
+def test_card_limit_and_missing_cards_have_their_own_outcomes():
+    assert outcomes(generate_deck(NOTES, 1, provider=Provider())) == ["covered", "cut_by_limit"]
+    empty = Provider(lambda stage, data: {"cards": []} if stage in {"review", "repair"} else None)
+    assert outcomes(generate_deck(NOTES, provider=empty)) == ["no_card", "no_card"]
+
+
+def test_repair_counts_requests_and_recovered_facts():
+    def omission(stage, data):
+        if stage == "review":
+            fact = data["facts"][0]
+            return {"cards": [{"front": "What does an address identify?", "back": fact["text"],
+                               "fact_ids": [fact["id"]]}]}
+
+    stats = generate_deck(NOTES, provider=Provider(omission))["stats"]
+    assert (stats["repair_requests"], stats["facts_repaired"]) == (1, 1)
+
+
+def test_cards_rejected_by_python_checks_are_counted():
+    def invalid(stage, data):
+        if stage in {"review", "repair"}:
+            return {"cards": [{"front": "Same statement", "back": "Same statement", "fact_ids": ["S1F1"]}]}
+
+    stats = generate_deck(NOTES, provider=Provider(invalid))["stats"]
+    assert stats["cards_reviewed"] == 1
+    assert stats["cards_failed_checks"] == 2  # one from review, one from repair
+
+
+def test_conflicting_answers_are_counted():
+    def conflict(stage, data):
+        if stage == "review":
+            return {"cards": [{"front": "How many bytes?", "back": f["text"], "fact_ids": [f["id"]]}
+                              for f in data["facts"]]}
+
+    stats = generate_deck(NOTES, provider=Provider(conflict))["stats"]
+    assert stats["conflicting_questions"] == 1
+
+
+def test_retries_and_their_waiting_time_are_counted(monkeypatch):
+    monkeypatch.setattr("flashcard_generator.ai.time.sleep", lambda _seconds: None)
+    failures = 0
+
+    def unavailable(stage, data):
+        nonlocal failures
+        if stage == "review" and failures < 2:
+            failures += 1
+            error = RuntimeError("private")
+            error.code = 503
+            raise error
+
+    stats = generate_deck(NOTES, provider=Provider(unavailable))["stats"]
+    assert (stats["retries"], stats["retry_wait_s"]) == (2, 6)  # waits of 2 s and 4 s
+
+
+def test_prompt_fingerprint_changes_when_a_prompt_changes(monkeypatch):
+    before = prompt_fingerprint()
+    assert prompt_fingerprint() == before
+    monkeypatch.setitem(STAGE_TASKS, "draft", "A different prompt")
+    assert prompt_fingerprint() != before
+
+
+def test_request_records_thinking_cached_size_finish_reason_and_item_count(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    fake = MagicMock()
+    usage = SimpleNamespace(prompt_token_count=30, candidates_token_count=12, thoughts_token_count=5,
+                            cached_content_token_count=7, total_token_count=47)
+    fake.models.generate_content.return_value = SimpleNamespace(
+        parsed=Inventory.model_validate({"facts": FACTS}),
+        candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="STOP"))],
+        usage_metadata=usage,
+        model_version="model-001",
+    )
+    monkeypatch.setattr("google.genai.Client", MagicMock(return_value=fake))
+    provider = GeminiProvider()
+    provider.ask("inventory", {"owned_section": NOTES}, Inventory)
+    [call] = provider.call_log
+    assert (call["thinking_tokens"], call["cached_tokens"]) == (5, 7)
+    assert call["input_chars"] > len(NOTES)
+    assert (call["items_returned"], call["finish_reason"]) == (2, "STOP")
+    assert call["error_code"] is None
+    assert provider.model_version == "model-001"
+    provider.close()
+
+
+def test_rejected_output_marks_the_request_as_failed_with_a_safe_code(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    fake = MagicMock()
+    fake.models.generate_content.return_value = SimpleNamespace(
+        parsed=None, candidates=[SimpleNamespace(finish_reason="MAX_TOKENS")]
+    )
+    monkeypatch.setattr("google.genai.Client", MagicMock(return_value=fake))
+    provider = GeminiProvider()
+    with pytest.raises(AIError):
+        provider.ask("inventory", {"owned_section": NOTES}, Inventory)
+    [call] = provider.call_log
+    assert (call["status"], call["error_code"]) == ("error", "truncated_output")
+    assert call["finish_reason"] == "MAX_TOKENS"
+
+    fake.models.generate_content.side_effect = RuntimeError("private notes")
+    with pytest.raises(RuntimeError):
+        provider.ask("draft", {"facts": []}, Inventory)
+    assert provider.call_log[-1]["error_code"] == "provider_error"
+    assert "private" not in str(provider.call_log)
+    provider.close()

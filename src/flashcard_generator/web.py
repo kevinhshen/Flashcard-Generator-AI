@@ -159,6 +159,9 @@ def create_app(*, env_path: Path | None = None) -> Flask:
         use_ai = payload.get("use_ai", True)
         if type(use_ai) is not bool:
             return None, (jsonify(error="use_ai must be true or false."), 400)
+        label = payload.get("notes_label")
+        if label is not None and (not isinstance(label, str) or len(label) > 255):
+            return None, (jsonify(error="notes_label must be text of at most 255 characters."), 400)
         if len(notes.split()) < 3 or not any(c.isalpha() for c in notes):
             return None, (
                 jsonify(error="Not enough usable text. Enter a definition or complete question/answer."),
@@ -173,10 +176,10 @@ def create_app(*, env_path: Path | None = None) -> Flask:
                 ),
                 400,
             )
-        return (notes, count, use_ai, model), None
+        return (notes, count, use_ai, model, (label or "").strip() or None), None
 
     def generate_once(values, progress, cancelled):
-        notes, count, use_ai, model = values
+        notes, count, use_ai, model, _label = values
         if use_ai:
             options = {"model": model} if model else {}
             return generate_deck(notes, count, progress=progress, cancelled=cancelled, **options)
@@ -190,7 +193,7 @@ def create_app(*, env_path: Path | None = None) -> Flask:
     # Main action. Every run is saved (completed, failed or cancelled) before its result is returned.
     # A storage problem never changes the result: save_run() logs it and returns None.
     def perform(values, progress=lambda _m: None, cancelled=lambda: False):
-        notes, count, use_ai, model = values
+        notes, count, use_ai, model, label = values
         started = time.perf_counter()
         requested = (model or os.getenv("GEMINI_MODEL", MODEL)) if use_ai else None
         result = None
@@ -205,12 +208,18 @@ def create_app(*, env_path: Path | None = None) -> Flask:
                 status="cancelled" if safe.code == "cancelled" else "failed", error_code=safe.code,
                 card_limit=count, duration_s=time.perf_counter() - started,
                 calls=getattr(safe, "calls", None) or (result or {}).get("calls", []),
+                stats=getattr(safe, "stats", None) or (result or {}).get("stats"),
+                notes_label=label,
             )
             raise
+        # Research-only data: saved below, but not sent to the page.
         calls = result.pop("calls", [])
+        stats = result.pop("stats", None)
+        facts = result.pop("facts", [])
         row = storage.save_run(
             notes=notes, result=result, mode=result.get("mode"), model=requested, status="completed",
             error_code=None, card_limit=count, duration_s=time.perf_counter() - started, calls=calls,
+            stats=stats, facts=facts, notes_label=label,
         )
         result["run_id"] = row["run_id"] if row else None
         result["metrics"] = storage.summary(row)

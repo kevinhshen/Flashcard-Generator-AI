@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,64 @@ CREATE TABLE IF NOT EXISTS cards (
     run_id TEXT NOT NULL REFERENCES runs(run_id),
     position INTEGER, front TEXT, back TEXT, card_type TEXT, source_excerpt TEXT
 );
+CREATE TABLE IF NOT EXISTS facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL REFERENCES runs(run_id),
+    fact_id TEXT, section INTEGER, text TEXT, source_quote TEXT, outcome TEXT
+);
 """
+
+# Columns added after the first release. connect() adds any that a database is missing, so existing
+# databases keep working and their old rows stay untouched (the new columns are simply empty there).
+# To record something new, add it here rather than to SCHEMA.
+ADDED_COLUMNS = {
+    "runs": {
+        "notes_words": "INTEGER",
+        "notes_label": "TEXT",
+        "chunk_size": "INTEGER",
+        "batch_size": "INTEGER",
+        "temperature": "REAL",
+        "max_output_tokens": "INTEGER",
+        "prompt_sha256": "TEXT",
+        "git_dirty": "INTEGER",
+        "model_version": "TEXT",
+        "thinking_tokens": "INTEGER",
+        "cached_tokens": "INTEGER",
+        "api_seconds": "REAL",
+        "retries": "INTEGER",
+        "retry_wait_s": "REAL",
+        "facts_inventoried": "INTEGER",
+        "facts_added_by_audit": "INTEGER",
+        "facts_removed_by_audit": "INTEGER",
+        "cards_drafted": "INTEGER",
+        "cards_reviewed": "INTEGER",
+        "cards_failed_checks": "INTEGER",
+        "repair_requests": "INTEGER",
+        "facts_repaired": "INTEGER",
+        "conflicting_questions": "INTEGER",
+        "exclusions": "INTEGER",
+    },
+    "stage_usage": {
+        "thinking_tokens": "INTEGER",
+        "cached_tokens": "INTEGER",
+        "input_chars": "INTEGER",
+        "items_returned": "INTEGER",
+        "finish_reason": "TEXT",
+        "error_code": "TEXT",
+    },
+    "cards": {"fact_ids": "TEXT", "front_chars": "INTEGER", "back_chars": "INTEGER"},
+}
+# Values generate_deck() reports in result["stats"]. Local-rules runs have none, so these stay empty.
+STAT_FIELDS = (
+    "chunk_size", "batch_size", "temperature", "max_output_tokens", "prompt_sha256", "model_version",
+    "retries", "retry_wait_s", "facts_inventoried", "facts_added_by_audit", "facts_removed_by_audit",
+    "cards_drafted", "cards_reviewed", "cards_failed_checks", "repair_requests", "facts_repaired",
+    "conflicting_questions", "exclusions",
+)
+CALL_FIELDS = (
+    "stage", "status", "seconds", "input_tokens", "output_tokens", "thinking_tokens", "cached_tokens",
+    "total_tokens", "input_chars", "items_returned", "finish_reason", "error_code",
+)
 
 # Columns shown on the Run page after a generation (the rest stay in the database).
 SUMMARY_FIELDS = (
@@ -55,6 +113,7 @@ EXPORT_QUERIES = {
     "runs": "SELECT * FROM runs ORDER BY created_at",
     "stage_usage": "SELECT * FROM stage_usage ORDER BY run_id, seq",
     "cards": "SELECT * FROM cards ORDER BY run_id, position",
+    "facts": "SELECT * FROM facts ORDER BY run_id, id",
 }
 # Excel reads a text cell starting with these as a formula, so such cells are forced to text.
 FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -72,7 +131,22 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path())
     conn.execute("PRAGMA foreign_keys = ON")  # SQLite ignores REFERENCES unless this is set per connection
     conn.executescript(SCHEMA)  # CREATE ... IF NOT EXISTS: safe to run on every connection
+    _add_missing_columns(conn)
     return conn
+
+
+def _add_missing_columns(conn):
+    for table, columns in ADDED_COLUMNS.items():
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, kind in columns.items():
+            if name in existing:
+                continue
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+            except sqlite3.OperationalError as exc:
+                # Another connection (the page and a background job can overlap) added it first.
+                if "duplicate column" not in str(exc):
+                    raise
 
 
 @lru_cache(maxsize=1)
@@ -88,16 +162,32 @@ def git_commit() -> str:
         return ""
 
 
+@lru_cache(maxsize=1)
+def git_dirty() -> int | None:
+    """1 if the code had uncommitted changes, 0 if not, None if git could not tell."""
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+            cwd=Path(__file__).resolve().parent,
+        )
+        return (1 if out.stdout.strip() else 0) if out.returncode == 0 else None
+    except Exception:
+        return None
+
+
 def _pct(part, whole):
     return round(100 * part / whole, 1) if whole else None
 
 
-def _run_row(*, notes, result, mode, model, status, error_code, card_limit, duration_s, calls):
+def _run_row(
+    *, notes, result, mode, model, status, error_code, card_limit, duration_s, calls, stats, notes_label
+):
     result = result or {}
     coverage = result.get("coverage") or {}
     cards = result.get("cards") or []
-    token_keys = ("input_tokens", "output_tokens", "total_tokens")
-    totals = {key: sum(call[key] for call in calls) for key in token_keys}
+    token_keys = ("input_tokens", "output_tokens", "thinking_tokens", "cached_tokens", "total_tokens")
+    totals = {key: sum(call.get(key) or 0 for call in calls) for key in token_keys}
     identified = coverage.get("identified_facts")
     covered = coverage.get("covered_facts")
     rejected = len(coverage.get("rejected_facts") or []) if coverage else None
@@ -110,9 +200,12 @@ def _run_row(*, notes, result, mode, model, status, error_code, card_limit, dura
         "error_code": error_code,
         "notes_sha256": hashlib.sha256(notes.encode("utf-8")).hexdigest(),
         "notes_chars": len(notes),
+        "notes_words": len(notes.split()),
+        "notes_label": notes_label,
         "card_limit": card_limit,
         "duration_s": round(duration_s, 3),
         **totals,
+        "api_seconds": round(sum(call.get("seconds") or 0 for call in calls), 3) if calls else None,
         "requests": coverage.get("requests", len(calls)),
         "sections": coverage.get("sections_total"),
         "identified_facts": identified,
@@ -129,6 +222,8 @@ def _run_row(*, notes, result, mode, model, status, error_code, card_limit, dura
         "tokens_per_card": round(totals["total_tokens"] / len(cards), 1) if cards and calls else None,
         "seconds_per_card": round(duration_s / len(cards), 2) if cards and calls else None,
         "git_commit": git_commit(),
+        "git_dirty": git_dirty(),
+        **{field: stats.get(field) for field in STAT_FIELDS},
     }
 
 
@@ -140,8 +235,11 @@ def _insert_rows(conn, table, rows):
     conn.executemany(sql, [tuple(row[column] for column in columns) for row in rows])
 
 
-def save_run(*, notes, result, mode, model, status, error_code, card_limit, duration_s, calls=()):
-    """Save one run, its AI requests and its cards.
+def save_run(
+    *, notes, result, mode, model, status, error_code, card_limit, duration_s,
+    calls=(), stats=None, facts=(), notes_label=None,
+):
+    """Save one run, its AI requests, its cards and its facts.
 
     Never raises: a storage problem must not break card generation. Returns the saved
     run row (a dict), or None if nothing was saved.
@@ -151,9 +249,13 @@ def save_run(*, notes, result, mode, model, status, error_code, card_limit, dura
         run = _run_row(
             notes=notes, result=result, mode=mode, model=model, status=status,
             error_code=error_code, card_limit=card_limit, duration_s=duration_s, calls=calls,
+            stats=stats or {}, notes_label=notes_label,
         )
         run_id = run["run_id"]
-        call_rows = [{"run_id": run_id, "seq": seq, **call} for seq, call in enumerate(calls, 1)]
+        call_rows = [
+            {"run_id": run_id, "seq": seq, **{field: call.get(field) for field in CALL_FIELDS}}
+            for seq, call in enumerate(calls, 1)
+        ]
         card_rows = [
             {
                 "run_id": run_id,
@@ -162,14 +264,29 @@ def save_run(*, notes, result, mode, model, status, error_code, card_limit, dura
                 "back": card.get("back") or "",
                 "card_type": card.get("card_type") or "basic",
                 "source_excerpt": card.get("source") or "",
+                "fact_ids": ",".join(card.get("fact_ids") or []) or None,
+                "front_chars": len(card.get("front") or ""),
+                "back_chars": len(card.get("back") or ""),
             }
             for position, card in enumerate((result or {}).get("cards") or [], 1)
         ]
+        fact_rows = [
+            {
+                "run_id": run_id,
+                "fact_id": fact.get("fact_id"),
+                "section": fact.get("section"),
+                "text": fact.get("text"),
+                "source_quote": fact.get("source_quote"),
+                "outcome": fact.get("outcome"),
+            }
+            for fact in facts or []
+        ]
         conn = connect()
-        with closing(conn), conn:  # one transaction: all three tables or none
+        with closing(conn), conn:  # one transaction: every table or none
             _insert_rows(conn, "runs", [run])
             _insert_rows(conn, "stage_usage", call_rows)
             _insert_rows(conn, "cards", card_rows)
+            _insert_rows(conn, "facts", fact_rows)
         return run
     except Exception:
         log.exception("Could not save research run")
@@ -189,9 +306,11 @@ def run_count() -> int:
 
 
 def _cell(value):
-    if isinstance(value, str) and len(value) > MAX_CELL_CHARS:
-        return value[:MAX_CELL_CHARS] + " …"
-    return value
+    if not isinstance(value, str):
+        return value
+    # Text from PDFs can hold control characters, which openpyxl refuses to write.
+    value = ILLEGAL_CHARACTERS_RE.sub("", value)
+    return value[:MAX_CELL_CHARS] + " …" if len(value) > MAX_CELL_CHARS else value
 
 
 def export_workbook() -> bytes:

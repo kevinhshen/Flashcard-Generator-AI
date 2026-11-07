@@ -79,11 +79,11 @@
   <caption>Table 3. What is measured, and how.</caption>
   <tr><th>Metric</th><th>Definition</th><th>Status</th></tr>
   <tr><td>Token consumption</td><td>Tokens reported by the Gemini API for each request, summed per stage and per run.</td>
-      <td>Recorded (one total per request); shown on the Run page.</td></tr>
-  <tr><td>Cost</td><td>Tokens &times; the published price per token for the chosen model. An estimate, not a bill.</td><td>Planned</td></tr>
-  <tr><td>Time</td><td>Wall-clock seconds per request and per run, with retry waits counted separately.</td><td>Planned</td></tr>
+      <td>Recorded per request and per run (input, output, thinking, cached, total); the run total is shown on the Run page.</td></tr>
+  <tr><td>Cost</td><td>Tokens &times; the published price per token for the chosen model. An estimate, not a bill.</td><td>Not stored, because prices change. Calculated later from the recorded tokens.</td></tr>
+  <tr><td>Time</td><td>Wall-clock seconds per request and per run, with retry waits counted separately.</td><td>Recorded.</td></tr>
   <tr><td>Accuracy</td><td>Compared with a hand-written reference: recall (key facts that got a card), precision
-      (cards that are correct), and the rate of quotes that really appear in the notes.</td><td>Planned</td></tr>
+      (cards that are correct), and the rate of quotes that really appear in the notes.</td><td>Quote rate recorded. Recall and precision need hand grading (planned); the facts sheet in the export supports it.</td></tr>
 </table>
 <p>
   The coverage report on the Run page is not an accuracy score. It counts facts the model itself found that ended
@@ -130,7 +130,7 @@
   <li>The server starts a background job and immediately returns a job ID.</li>
   <li>The page asks for the job's status about every 1.2 seconds and shows progress text.</li>
   <li>The job splits the notes into sections and runs the stages in Table 2, counting tokens after each request.</li>
-  <li>When it finishes, the server stores the result (cards, coverage report, token usage) and the page displays it.</li>
+  <li>When it finishes, the server saves the run to its local database (timing, tokens, cards, facts) and the page displays the result.</li>
 </ol>
 
 <h2 id="terms">7. Terminology</h2>

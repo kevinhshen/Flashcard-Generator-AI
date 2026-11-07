@@ -18,6 +18,7 @@ let showingAnswer = false;
 let busy = false;
 let jobId = null;
 let coverage = null;
+let notesLabel = null; // name of the imported file; cleared once the notes are edited
 
 function saveNotes() {
   $("#character-count").textContent = notesInput.value.length.toLocaleString() + " characters";
@@ -181,7 +182,7 @@ async function generateCards() {
   try {
     const response = await requestJson(useAI ? "/api/jobs" : "/api/generate", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes, max_cards: countInput.value === "" ? null : Number(countInput.value), use_ai: useAI, ...(modelInput.value && { model: modelInput.value }) }),
+      body: JSON.stringify({ notes, max_cards: countInput.value === "" ? null : Number(countInput.value), use_ai: useAI, ...(modelInput.value && { model: modelInput.value }), ...(notesLabel && { notes_label: notesLabel }) }),
     });
     if (useAI) {
       jobId = response.job_id;
@@ -312,7 +313,7 @@ function exportCsv() {
 try { notesInput.value = localStorage.getItem("recall-notes") || ""; } catch {}
 saveNotes();
 updateDeckState();
-notesInput.addEventListener("input", saveNotes);
+notesInput.addEventListener("input", () => { notesLabel = null; saveNotes(); });
 modeInput.addEventListener("change", () => {
   $("#mode-help").textContent = modeInput.value === "ai"
     ? "Sends notes to Google. Inventories facts, audits omissions, drafts and reviews cards. Multiple requests can take several minutes."
@@ -320,6 +321,7 @@ modeInput.addEventListener("change", () => {
 });
 $("#sample-button").addEventListener("click", () => {
   notesInput.value = "Velocity: The rate of change of displacement.\n\nWhat is the SI unit of force? The SI unit of force is the newton.";
+  notesLabel = null;
   saveNotes();
 });
 generateButton.addEventListener("click", generateCards);
@@ -346,6 +348,7 @@ fileInput.addEventListener("change", async () => {
     form.append("file", file);
     const data = await requestJson("/api/import", { method: "POST", body: form }, 30000);
     notesInput.value = data.text;
+    notesLabel = file.name;
     saveNotes();
     showNotice(data.warning || ("Imported " + file.name + ". Review the extracted text before generating."));
   } catch (error) { showNotice(error.message, true); }

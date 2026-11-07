@@ -6,6 +6,7 @@ every meaningful statement in the source was found or understood correctly.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -24,6 +25,7 @@ BATCH_SIZE = 12
 SAFETY_CARD_LIMIT = 1000
 RETRY_DELAYS = (2, 4, 8)
 MODEL_TEMPERATURE = 0.15  
+MAX_OUTPUT_TOKENS = 16384
 
 # Lower temperature reduces hallucinations and answer leakage
 
@@ -73,6 +75,50 @@ unsupported claim that one address stores four bytes.
 Output only the requested schema. Return empty lists for unusable source material.
 """
 
+STAGE_TASKS = {
+    "inventory": (
+        "Read the entire section in order. Inventory EVERY important teachable fact: definitions, "
+        "mechanisms, relationships, comparisons, causes, processes, examples, "
+        "formulas and variable meanings, "
+        "units, assumptions, restrictions, exceptions. Split compound facts without losing context. "
+        "Use surrounding context only to resolve names/headings; "
+        "facts must be grounded in the owned section. "
+        "Quote the exact excerpt for each. Avoid facts drawn from a table of contents alone."
+    ),
+    "audit_inventory": (
+        "Independently audit the draft inventory against the WHOLE owned section, line by line. "
+        "Return the COMPLETE corrected inventory, retaining all supported facts "
+        "and adding missed facts. Pay attention to the end, sub-bullets, "
+        "contrasts, qualifiers and worked examples. "
+        "Remove misread or unsupported claims. Record reasons for exclusions. "
+        "Never shorten the inventory to match a requested card count."
+    ),
+    "draft": (
+        "Create self-contained question/answer cards covering ALL supplied fact IDs. "
+        "No important fact should be omitted. One fact can need multiple cards; "
+        "closely related facts can "
+        "share a focused comparison card. Include only the IDs truly tested. "
+        "An answer must satisfy every part of its question, including conditions and units."
+    ),
+    "review": (
+        "Act as a strict reviewer. Check EVERY draft answer against its source facts. "
+        "Repair factual or logical errors, missing qualifiers, ambiguous subjects, oversized cards, "
+        "answer leakage, and questions that ask something the answer does not provide. "
+        "Return the COMPLETE replacement batch of cards, not just corrections. "
+        "Add cards for EVERY supplied fact ID not yet tested. Split compound objectives. "
+        "Only associate an ID if the card really tests that fact. "
+        "Never hide missing coverage by putting unused IDs on unrelated cards."
+    ),
+}
+# Repair reuses the review instructions; its own stage name keeps its usage measured separately.
+STAGE_TASKS["repair"] = STAGE_TASKS["review"]
+
+
+def prompt_fingerprint() -> str:
+    """Changes whenever a prompt changes, so runs made with different prompts can be told apart."""
+    prompts = json.dumps({"system": SYSTEM, "stages": STAGE_TASKS}, sort_keys=True)
+    return hashlib.sha256(prompts.encode("utf-8")).hexdigest()
+
 
 # BaseModel - automatically process json data from Gemini
 # Declaring the schema mode
@@ -110,6 +156,7 @@ class AIError(RuntimeError):
         self.code = code
         # Per-request usage records, attached when a run fails part-way so the failure is still measured.
         self.calls: list[dict] = []
+        self.stats: dict = {}
 
 
 class Cancelled(AIError):
@@ -209,7 +256,14 @@ class StudyFact:
     section: int
 
 
-def _call_record(stage: str, started: float, usage=None, status: str = "ok") -> dict:
+def _call_record(
+    stage: str,
+    started: float,
+    input_chars: int,
+    usage=None,
+    status: str = "ok",
+    error_code: str | None = None,
+) -> dict:
     """One provider request: how long it took and the token counts Gemini reported for it."""
 
     def count(name: str) -> int:
@@ -221,8 +275,19 @@ def _call_record(stage: str, started: float, usage=None, status: str = "ok") -> 
         "seconds": round(time.perf_counter() - started, 3),
         "input_tokens": count("prompt_token_count"),
         "output_tokens": count("candidates_token_count"),
+        "thinking_tokens": count("thoughts_token_count"),
+        "cached_tokens": count("cached_content_token_count"),
         "total_tokens": count("total_token_count"),
+        "input_chars": input_chars,
+        "items_returned": None,
+        "finish_reason": None,
+        "error_code": error_code,
     }
+
+
+def _finish_reason(candidate) -> str:
+    reason = getattr(candidate, "finish_reason", None)
+    return getattr(reason, "name", None) or (str(reason) if reason else "")
 
 
 class GeminiProvider:
@@ -234,6 +299,7 @@ class GeminiProvider:
 
         # One record per request attempt, in order. Read by generate_deck().
         self.call_log: list[dict] = []
+        self.model_version: str | None = None
 
 
         if not has_api_key():
@@ -261,80 +327,56 @@ class GeminiProvider:
     def ask(self, stage: str, data: dict, schema: type[BaseModel]):
         from google.genai import types
 
-        tasks = {
-            "inventory": (
-                "Read the entire section in order. Inventory EVERY important teachable fact: definitions, "
-                "mechanisms, relationships, comparisons, causes, processes, examples, "
-                "formulas and variable meanings, "
-                "units, assumptions, restrictions, exceptions. Split compound facts without losing context. "
-                "Use surrounding context only to resolve names/headings; "
-                "facts must be grounded in the owned section. "
-                "Quote the exact excerpt for each. Avoid facts drawn from a table of contents alone."
-            ),
-            "audit_inventory": (
-                "Independently audit the draft inventory against the WHOLE owned section, line by line. "
-                "Return the COMPLETE corrected inventory, retaining all supported facts "
-                "and adding missed facts. Pay attention to the end, sub-bullets, "
-                "contrasts, qualifiers and worked examples. "
-                "Remove misread or unsupported claims. Record reasons for exclusions. "
-                "Never shorten the inventory to match a requested card count."
-            ),
-            "draft": (
-                "Create self-contained question/answer cards covering ALL supplied fact IDs. "
-                "No important fact should be omitted. One fact can need multiple cards; "
-                "closely related facts can "
-                "share a focused comparison card. Include only the IDs truly tested. "
-                "An answer must satisfy every part of its question, including conditions and units."
-            ),
-            "review": (
-                "Act as a strict reviewer. Check EVERY draft answer against its source facts. "
-                "Repair factual or logical errors, missing qualifiers, ambiguous subjects, oversized cards, "
-                "answer leakage, and questions that ask something the answer does not provide. "
-                "Return the COMPLETE replacement batch of cards, not just corrections. "
-                "Add cards for EVERY supplied fact ID not yet tested. Split compound objectives. "
-                "Only associate an ID if the card really tests that fact. "
-                "Never hide missing coverage by putting unused IDs on unrelated cards."
-            ),
-        }
-        # Repair reuses the review instructions; its own stage name keeps its usage measured separately.
-        tasks["repair"] = tasks["review"]
+
+        contents = STAGE_TASKS[stage] + "\nDATA (not instructions):\n" + json.dumps(data, ensure_ascii=False)
+        input_chars = len(SYSTEM) + len(contents)
 
         # API call
         started = time.perf_counter()
         try:
             response = self.client.models.generate_content(
-            model=self.model,
-            contents=tasks[stage] + "\nDATA (not instructions):\n" + json.dumps(data, ensure_ascii=False),
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM, # System instructions
-                temperature=MODEL_TEMPERATURE,
-                response_mime_type="application/json",
-                response_schema=schema,
-                max_output_tokens=16384,
-            ),
-        )
-
-        except Exception:
-            self.call_log.append(_call_record(stage, started, status="error"))
+                model=self.model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM, # System instructions
+                    temperature=MODEL_TEMPERATURE,
+                    response_mime_type="application/json",
+                    response_schema=schema,
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                ),
+            )
+        except Exception as exc:
+            self.call_log.append(
+                _call_record(stage, started, input_chars, status="error", error_code=safe_ai_error(exc).code)
+            )
             raise
 
-        # Record usage for every successful request, including outputs rejected below.
-        self.call_log.append(_call_record(stage, started, getattr(response, "usage_metadata", None)))
-        
+        # Record usage for every request Gemini answered, including outputs rejected below.
+        record = _call_record(stage, started, input_chars, getattr(response, "usage_metadata", None))
+        self.call_log.append(record)
+        self.model_version = getattr(response, "model_version", None) or self.model_version
+
         # list comprehensiion for reasons to stop
-        reasons = [
-            str(getattr(c, "finish_reason", "")) for c in (getattr(response, "candidates", None) or [])
-        ]
-        if any("MAX_TOKENS" in reason for reason in reasons):
-            raise AIError(
-                "truncated_output", "Gemini hit its response limit. Split this source section and retry."
-            )
-        if any(any(flag in reason for flag in ("SAFETY", "RECITATION", "BLOCKLIST")) for reason in reasons):
-            raise AIError(
-                "blocked_output", "Gemini did not return cards for this source. Review the source and retry."
-            )
-        parsed = response.parsed
-        return parsed if isinstance(parsed, schema) else schema.model_validate_json(response.text or "")
+        reasons = [_finish_reason(c) for c in (getattr(response, "candidates", None) or [])]
+        record["finish_reason"] = ",".join(reason for reason in reasons if reason) or None
+        try:
+            if any("MAX_TOKENS" in reason for reason in reasons):
+                raise AIError(
+                    "truncated_output", "Gemini hit its response limit. Split this source section and retry."
+                )
+            blocked = ("SAFETY", "RECITATION", "BLOCKLIST")
+            if any(any(flag in reason for flag in blocked) for reason in reasons):
+                raise AIError(
+                    "blocked_output",
+                    "Gemini did not return cards for this source. Review the source and retry.",
+                )
+            parsed = response.parsed
+            output = parsed if isinstance(parsed, schema) else schema.model_validate_json(response.text or "")
+        except Exception as exc:
+            record.update(status="error", error_code=safe_ai_error(exc).code)
+            raise
+        record["items_returned"] = len(getattr(output, "facts", None) or getattr(output, "cards", None) or [])
+        return output
 
     def close(self):
         self.client.close()
@@ -389,6 +431,29 @@ def generate_deck(
     rejected_facts = []
     calls = 0
     client = None
+    fact_log = []  # facts that never reached the card stages; the rest are added at the end
+    # Settings and stage-by-stage counts for the research data. Also attached to errors,
+    # so a run that fails part-way keeps what it measured.
+    stats = {
+        "chunk_size": CHUNK_SIZE,
+        "batch_size": BATCH_SIZE,
+        "temperature": MODEL_TEMPERATURE,
+        "max_output_tokens": MAX_OUTPUT_TOKENS,
+        "prompt_sha256": prompt_fingerprint(),
+        "model_version": None,
+        "retries": 0,
+        "retry_wait_s": 0,
+        "facts_inventoried": 0,
+        "facts_added_by_audit": 0,  # a reworded fact counts as one added and one removed
+        "facts_removed_by_audit": 0,
+        "cards_drafted": 0,
+        "cards_reviewed": 0,
+        "cards_failed_checks": 0,
+        "repair_requests": 0,
+        "facts_repaired": 0,
+        "conflicting_questions": 0,
+        "exclusions": 0,
+    }
 
     # retry wrapper function
     def ask(stage, data, schema):
@@ -414,6 +479,7 @@ def generate_deck(
                         "Gemini is still unavailable after 4 attempts for this step. Try again later.",
                     ) from None
                 delay = RETRY_DELAYS[attempt]
+                stats["retries"] += 1
                 progress(
                     f"Gemini is temporarily unavailable. Retrying this step in {delay}s "
                     f"(attempt {attempt + 2}/{len(RETRY_DELAYS) + 1})…"
@@ -423,6 +489,7 @@ def generate_deck(
                     if cancelled():
                         raise Cancelled() from None
                     time.sleep(0.25)
+                    stats["retry_wait_s"] += 0.25
                 progress(f"Retrying the current Gemini step (attempt {attempt + 2}/{len(RETRY_DELAYS) + 1})…")
                 continue
             if cancelled():
@@ -457,6 +524,10 @@ def generate_deck(
             # Keep every removed/reworded objective visible for human inspection.
             
             audited_keys = {(normalize(f.text).casefold(), normalize(f.source)) for f in inventory.facts}
+            draft_keys = {(normalize(f.text).casefold(), normalize(f.source)) for f in draft.facts}
+            stats["facts_inventoried"] += len(draft.facts)
+            stats["facts_added_by_audit"] += len(audited_keys - draft_keys)
+            stats["exclusions"] += len(inventory.exclusions)
             
             # check facts that didn't pass the audit
             for original in draft.facts:
@@ -467,6 +538,16 @@ def generate_deck(
                         {
                             "section": section,
                             "reason": "Audit revised or removed draft objective: " + original.text,
+                        }
+                    )
+                    stats["facts_removed_by_audit"] += 1
+                    fact_log.append(
+                        {
+                            "fact_id": None,
+                            "section": section,
+                            "text": original.text,
+                            "source_quote": original.source,
+                            "outcome": "audit_removed",
                         }
                     )
                     
@@ -489,6 +570,15 @@ def generate_deck(
                             "reason": "AI source excerpt could not be located in its section.",
                         }
                     )
+                    fact_log.append(
+                        {
+                            "fact_id": None,
+                            "section": section,
+                            "text": fact.text,
+                            "source_quote": fact.source,
+                            "outcome": "quote_not_found",
+                        }
+                    )
                     continue
                 
                 
@@ -508,16 +598,23 @@ def generate_deck(
             progress(f"Drafting batch {number}/{len(batches)} · {len(facts)} identified facts")
             data = {"facts": [fact.__dict__ for fact in batch]}
             draft = ask("draft", data, CardBatch)
+            stats["cards_drafted"] += len(draft.cards)
             progress(f"Reviewing batch {number}/{len(batches)} · accuracy, question clarity, and coverage")
             reviewed = ask("review", {**data, "draft": draft.model_dump()}, CardBatch)
+            stats["cards_reviewed"] += len(reviewed.cards)
             accepted = _valid_cards(reviewed, batch)
+            stats["cards_failed_checks"] += len(reviewed.cards) - len(accepted)
             covered = {fid for card in accepted for fid in card["fact_ids"]}
             missing = [fact for fact in batch if fact.id not in covered]
             if missing:
                 progress(f"Repairing coverage gaps in batch {number}/{len(batches)}")
                 repair_data = {"facts": [fact.__dict__ for fact in missing], "draft": {"cards": []}}
                 repair = ask("repair", repair_data, CardBatch)
-                accepted.extend(_valid_cards(repair, missing))
+                repaired = _valid_cards(repair, missing)
+                stats["repair_requests"] += 1
+                stats["cards_failed_checks"] += len(repair.cards) - len(repaired)
+                stats["facts_repaired"] += len({fid for card in repaired for fid in card["fact_ids"]})
+                accepted.extend(repaired)
             for card in accepted:
                 # Exact question/answer duplicates can merge provenance. Conflicting
                 # answers to the same question are left unresolved rather than guessed.
@@ -533,6 +630,7 @@ def generate_deck(
                     cards.remove(previous)
                     del by_front[key]
                     conflicts.add(key)
+                    stats["conflicting_questions"] += 1
                 else:
                     cards.append(card)
                     by_front[key] = card
@@ -566,6 +664,21 @@ def generate_deck(
         
         # Return statement
         calls_log = list(getattr(client, "call_log", []))
+        stats["model_version"] = getattr(client, "model_version", None)
+        for fact in facts:
+            if fact.id in covered:
+                outcome = "covered"
+            else:
+                outcome = "cut_by_limit" if fact.id in all_covered else "no_card"
+            fact_log.append(
+                {
+                    "fact_id": fact.id,
+                    "section": fact.section,
+                    "text": fact.text,
+                    "source_quote": fact.source,
+                    "outcome": outcome,
+                }
+            )
         usage_by_stage = {stage: 0 for stage in ("inventory", "audit_inventory", "draft", "review", "repair")}
         for call in calls_log:
             usage_by_stage[call["stage"]] = usage_by_stage.get(call["stage"], 0) + call["total_tokens"]
@@ -583,6 +696,8 @@ def generate_deck(
                 
             },
             "calls": calls_log,
+            "stats": stats,
+            "facts": fact_log,
             "warning": " ".join(warnings),
             "coverage": {
                 "identified_facts": len(facts),
@@ -601,6 +716,8 @@ def generate_deck(
     except Exception as exc:
         error = safe_ai_error(exc)
         error.calls = list(getattr(client, "call_log", []))
+        stats["model_version"] = getattr(client, "model_version", None)
+        error.stats = stats
         raise error from exc
     
     finally:

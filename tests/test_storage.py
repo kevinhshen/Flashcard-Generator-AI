@@ -121,7 +121,7 @@ def test_summary_of_missing_run_is_all_none():
 def test_export_is_a_workbook_with_one_sheet_per_table():
     save()
     book = load_workbook(BytesIO(storage.export_workbook()))
-    assert book.sheetnames == ["runs", "stage_usage", "cards"]
+    assert book.sheetnames == ["runs", "stage_usage", "cards", "facts"]
     assert book["runs"].max_row == 2
     assert "coverage_pct" in [cell.value for cell in book["runs"][1]]
     assert book["stage_usage"].max_row == 4
@@ -139,3 +139,96 @@ def test_empty_database_exports_headers_only():
     book = load_workbook(BytesIO(storage.export_workbook()))
     assert book["runs"].max_row == 1
     assert book["cards"].max_row == 1
+    assert book["facts"].max_row == 1
+
+
+def test_input_size_label_settings_and_stage_counts_are_saved():
+    stats = {"chunk_size": 6000, "temperature": 0.15, "prompt_sha256": "abc", "model_version": "m-1",
+             "retries": 2, "retry_wait_s": 6, "facts_added_by_audit": 3, "not_a_column": "ignored"}
+    save(stats=stats, notes_label="dsa.txt")
+    [run] = query("SELECT * FROM runs")
+    assert run["notes_chars"] == len(NOTES)
+    assert run["notes_words"] == 10
+    assert run["notes_label"] == "dsa.txt"
+    assert (run["chunk_size"], run["temperature"], run["prompt_sha256"]) == (6000, 0.15, "abc")
+    assert (run["model_version"], run["retries"], run["retry_wait_s"]) == ("m-1", 2, 6)
+    assert run["facts_added_by_audit"] == 3
+    assert run["batch_size"] is None  # not reported, so left empty rather than guessed
+    assert run["git_dirty"] in {0, 1, None}
+
+
+def test_token_types_and_api_time_add_up_across_requests():
+    calls = [{**CALLS[0], "thinking_tokens": 5, "cached_tokens": 7}, {**CALLS[2], "thinking_tokens": 1}]
+    save(calls=calls)
+    [run] = query("SELECT * FROM runs")
+    assert (run["thinking_tokens"], run["cached_tokens"]) == (6, 7)
+    assert run["api_seconds"] == 3.5
+
+
+def test_request_details_are_saved():
+    call = {**CALLS[0], "input_chars": 900, "items_returned": 4, "finish_reason": "STOP"}
+    failed = {**CALLS[1], "input_chars": 800, "error_code": "quota"}
+    save(calls=[call, failed])
+    first, second = query("SELECT * FROM stage_usage ORDER BY seq")
+    assert (first["input_chars"], first["items_returned"], first["finish_reason"]) == (900, 4, "STOP")
+    assert (second["status"], second["error_code"]) == ("error", "quota")
+
+
+def test_cards_record_their_facts_and_lengths():
+    result = {**RESULT, "cards": [{"front": "Front?", "back": "Back", "fact_ids": ["S1F1", "S1F2"]},
+                                  {"front": "Local card", "back": "No fact ids"}]}
+    save(result=result)
+    with_ids, without_ids = query("SELECT * FROM cards ORDER BY position")
+    assert with_ids["fact_ids"] == "S1F1,S1F2"
+    assert (with_ids["front_chars"], with_ids["back_chars"]) == (6, 4)
+    assert without_ids["fact_ids"] is None
+
+
+def test_facts_are_saved_and_exported_with_their_outcome():
+    facts = [
+        {"fact_id": "S1F1", "section": 1, "text": "A fact", "source_quote": "A quote", "outcome": "covered"},
+        {"fact_id": None, "section": 1, "text": "Gone", "source_quote": "Other", "outcome": "audit_removed"},
+    ]
+    row = save(facts=facts)
+    saved = query("SELECT * FROM facts ORDER BY id")
+    assert [fact["outcome"] for fact in saved] == ["covered", "audit_removed"]
+    assert saved[0]["run_id"] == row["run_id"]
+    assert saved[1]["fact_id"] is None
+    assert load_workbook(BytesIO(storage.export_workbook()))["facts"].max_row == 3
+    assert "audit_removed" in storage.export_csv("facts").decode("utf-8-sig")
+
+
+def test_old_database_is_upgraded_without_touching_its_rows():
+    old_columns = "run_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, notes_chars INTEGER"
+    conn = sqlite3.connect(storage.db_path())
+    with closing(conn), conn:
+        conn.execute(f"CREATE TABLE runs ({old_columns})")
+        conn.execute("INSERT INTO runs VALUES ('old-run', '2026-01-01', 123)")
+        conn.execute("CREATE TABLE cards (card_id INTEGER PRIMARY KEY, run_id TEXT, front TEXT)")
+        conn.execute("INSERT INTO cards (run_id, front) VALUES ('old-run', 'Old front')")
+
+    upgraded = storage.connect()
+    with closing(upgraded):
+        upgraded.row_factory = sqlite3.Row
+        old = dict(upgraded.execute("SELECT * FROM runs WHERE run_id = 'old-run'").fetchone())
+        card = dict(upgraded.execute("SELECT * FROM cards").fetchone())
+    assert (old["created_at"], old["notes_chars"]) == ("2026-01-01", 123)
+    assert old["notes_words"] is None
+    assert (card["front"], card["fact_ids"]) == ("Old front", None)
+
+
+def test_real_older_database_still_accepts_new_runs():
+    """The exact case in data/: tables made by the previous version, then a new run is saved."""
+    previous_schema = storage.SCHEMA
+    conn = sqlite3.connect(storage.db_path())
+    with closing(conn):
+        conn.executescript(previous_schema)  # SCHEMA holds the original columns only
+    assert save(stats={"chunk_size": 6000}, facts=[{"fact_id": "S1F1", "outcome": "covered"}]) is not None
+    assert query("SELECT chunk_size FROM runs") == [{"chunk_size": 6000}]
+
+
+def test_control_characters_from_pdfs_do_not_break_the_excel_export():
+    result = {**RESULT, "cards": [{"front": "Page\x0cbreak?", "back": "Yes", "source": "Page\x0cbreak"}]}
+    save(result=result)
+    sheet = load_workbook(BytesIO(storage.export_workbook()))["cards"]
+    assert "Pagebreak?" in [cell.value for row in sheet.iter_rows() for cell in row]

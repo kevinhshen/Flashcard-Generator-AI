@@ -235,6 +235,27 @@ test("request timeout restores controls and preserves manual cards", async () =>
   dom.window.close();
 });
 
+test("an imported file's name is sent with the run until the notes are edited", async () => {
+  const bodies = [];
+  const {dom,window,$} = app({fetch:async (url,options) => {
+    if (url === "/api/import") return {ok:true,json:async()=>({text:"Force: A push or pull."})};
+    bodies.push(JSON.parse(options.body));
+    return {ok:true,json:async()=>({cards:[card],mode:"local"})};
+  }});
+  Object.defineProperty($("#notes-file"), "files", {configurable:true,value:[new window.File(["x"],"dsa.txt")]});
+  $("#notes-file").dispatchEvent(new window.Event("change"));
+  await tick();
+  $("#generate-button").click();
+  await tick();
+  assert.equal(bodies[0].notes_label, "dsa.txt");
+  $("#notes").value = "Force: A push or pull. Edited.";
+  $("#notes").dispatchEvent(new window.Event("input"));
+  $("#generate-button").click();
+  await tick();
+  assert.equal("notes_label" in bodies[1], false);
+  dom.window.close();
+});
+
 test("run metrics line shows time, tokens, coverage and whether the run was saved", async () => {
   const metrics = {run_id:"abcdef1234567890", duration_s:4.2, total_tokens:280, requests:2, identified_facts:4,
     covered_facts:3, coverage_pct:75, source_verified_pct:75, card_count:1, tokens_per_card:280, seconds_per_card:4.2};

@@ -219,6 +219,50 @@ def test_generation_is_saved_and_export_downloads_a_workbook(client):
     assert "Saved runs: 1" in client.get("/export").text
 
 
+def test_notes_label_is_saved_and_research_data_stays_off_the_page(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    def generate(notes, count, **kwargs):
+        return {
+            "cards": [], "mode": "ai", "model": "test-model", "calls": [],
+            "stats": {"chunk_size": 6000},
+            "facts": [{"fact_id": "S1F1", "section": 1, "text": "Fact", "outcome": "no_card"}],
+        }
+
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", generate)
+    payload = client.post(
+        "/api/generate", json={"notes": "Force is a push or pull.", "notes_label": "  dsa.txt "}
+    ).get_json()
+    assert not {"calls", "stats", "facts"} & set(payload)
+    conn = storage.connect()
+    with closing(conn):
+        assert conn.execute("SELECT notes_label, chunk_size FROM runs").fetchall() == [("dsa.txt", 6000)]
+        assert conn.execute("SELECT fact_id, outcome FROM facts").fetchall() == [("S1F1", "no_card")]
+
+
+@pytest.mark.parametrize("label", [123, ["dsa.txt"], "x" * 256])
+def test_bad_notes_label_is_rejected(client, label):
+    response = client.post(
+        "/api/generate", json={"notes": "Force: A push or pull.", "use_ai": False, "notes_label": label}
+    )
+    assert response.status_code == 400
+
+
+def test_failed_run_saves_the_counts_attached_to_its_error(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    def failing(notes, count, **kwargs):
+        error = AIError("quota", "Gemini quota/rate limit reached.")
+        error.stats = {"facts_inventoried": 4}
+        raise error
+
+    monkeypatch.setattr("flashcard_generator.web.generate_deck", failing)
+    assert client.post("/api/generate", json={"notes": "Force is a push or pull."}).status_code == 502
+    conn = storage.connect()
+    with closing(conn):
+        assert conn.execute("SELECT status, facts_inventoried FROM runs").fetchall() == [("failed", 4)]
+
+
 def test_failed_ai_job_is_saved_with_its_error_code(client, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 

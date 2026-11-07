@@ -9,7 +9,7 @@
 {% include "nav.html" %}
 <h1>Export</h1>
 <p>Each generation run is saved to a local SQLite database: timing, token counts, coverage, and the cards it produced.
-  The full notes are not saved, only a fingerprint and the character count. Cards keep their source excerpts.</p>
+  The full notes are not saved, only a fingerprint and their size. Cards and facts keep the excerpts they quote from the notes.</p>
 <ul>
   <li>Saved runs: {{ runs if runs is not none else "unavailable" }}</li>
   <li>Database file: <code>{{ database or "unavailable" }}</code></li>
@@ -19,7 +19,8 @@
   <li><a href="/api/export.csv?table=runs">runs.csv</a></li>
   <li><a href="/api/export.csv?table=stage_usage">stage_usage.csv</a></li>
   <li><a href="/api/export.csv?table=cards">cards.csv</a></li>
+  <li><a href="/api/export.csv?table=facts">facts.csv</a></li>
 </ul>
-<p><small>Sheets: runs (one row per run, with derived per-card numbers), stage_usage (one row per AI request), cards.</small></p>
+<p><small>Sheets: runs (one row per run, with derived per-card numbers), stage_usage (one row per AI request), cards, facts (one row per fact the model found, with what happened to it).</small></p>
 </body>
 </html>
