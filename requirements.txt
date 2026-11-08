@@ -4,3 +4,4 @@ pydantic>=2.8,<3
 python-dotenv>=1.0,<2
 pypdf>=5.6,<7
 openpyxl>=3.1,<4
+Markdown>=3.6,<4

@@ -192,7 +192,7 @@ def _run_row(
     covered = coverage.get("covered_facts")
     rejected = len(coverage.get("rejected_facts") or []) if coverage else None
     return {
-        "run_id": uuid.uuid4().hex,
+        "run_id": uuid.uuid4().hex, # random unique ID
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": mode,
         "model": result.get("model") or model,

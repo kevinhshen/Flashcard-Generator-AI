@@ -13,6 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv, set_key
 from flask import Flask, jsonify, render_template, request, send_file
+import markdown
 
 from . import storage
 from .ai import AVAILABLE_MODELS, MODEL, Cancelled, generate_deck, has_api_key, safe_ai_error
@@ -45,7 +46,12 @@ def create_app(*, env_path: Path | None = None) -> Flask:
 
     @app.get("/about")
     def about():
-        return render_template("about.html")
+        readme = Path(__file__).resolve().parents[2] / "README.md"
+        html = markdown.markdown(
+            readme.read_text(encoding="utf-8") if readme.exists() else "README.md not found.",
+            extensions=["fenced_code", "tables", "sane_lists"],
+        )
+        return render_template("about.html", readme_html=html)
 
     @app.get("/compare")
     def compare():
