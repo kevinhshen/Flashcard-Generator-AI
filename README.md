@@ -1,10 +1,8 @@
 # Recall — AI Flashcard Generator
 
-Recall turns class notes into editable flashcards and exports them as a CSV that can be imported into Anki,
-Quizlet, or a spreadsheet. Gemini AI is selected by default and builds a source fact inventory, checks for
-omissions, drafts questions, and reviews their answers. Offline pattern matching is available separately.
+Recall is an AI Flashcard Generator powered by Gemini AI API, where it runs a multi stages pipeline: 5 LLM stages (inventory, audit, draft, review, repair) with deterministic Python based checks in between (chunking, quote verfication, card validation, dedup/conflict handling, card limit/coverage report)
 
-The app runs on your computer. Starting it opens the interface automatically in your default browser.
+The app runs on your computer, it requires manually add a free Gemini API following the instruction below. 
 
 ## Features
 
