@@ -11,9 +11,10 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
+import markdown
 from dotenv import load_dotenv, set_key
 from flask import Flask, jsonify, render_template, request, send_file
-import markdown
+
 
 from . import storage
 from .ai import AVAILABLE_MODELS, MODEL, Cancelled, generate_deck, has_api_key, safe_ai_error
