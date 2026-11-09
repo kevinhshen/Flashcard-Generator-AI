@@ -70,7 +70,8 @@ def create_app(*, env_path: Path | None = None) -> Flask:
     def history():
         # Show history of all runs
         return render_template("history.html")
-        
+
+
     @app.get("/api/export.xlsx")
     def export_xlsx():
         try:

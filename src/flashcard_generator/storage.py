@@ -308,7 +308,11 @@ def run_count() -> int:
 def list_past_runs() -> list[dict]:
     """Return a list of all past runs"""
     conn = connect()
-
+    conn.row_factory = sqlite3.Row
+    with closing(conn):
+        row = conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
+    return [dict(r) for r in row]
+    
 def _cell(value):
     if not isinstance(value, str):
         return value
