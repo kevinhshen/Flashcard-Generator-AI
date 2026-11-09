@@ -1,4 +1,5 @@
 # Secrets
+.*
 .env
 .env.*
 *.env
@@ -26,7 +27,7 @@ env/
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/c
+.vscode/
 
 # SQL and data
 data/

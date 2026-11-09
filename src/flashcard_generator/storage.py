@@ -305,6 +305,10 @@ def run_count() -> int:
         return conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
 
 
+def list_past_runs() -> list[dict]:
+    """Return a list of all past runs"""
+    conn = connect()
+
 def _cell(value):
     if not isinstance(value, str):
         return value
