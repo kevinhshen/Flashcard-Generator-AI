@@ -484,6 +484,7 @@ def generate_deck(
                     f"Gemini is temporarily unavailable. Retrying this step in {delay}s "
                     f"(attempt {attempt + 2}/{len(RETRY_DELAYS) + 1})…"
                 )
+                
                 # Short waits let Cancel stop backoff without another API call.
                 for _ in range(delay * 4):
                     if cancelled():

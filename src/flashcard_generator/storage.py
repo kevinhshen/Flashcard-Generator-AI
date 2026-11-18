@@ -234,7 +234,8 @@ def _insert_rows(conn, table, rows):
     sql = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})"
     conn.executemany(sql, [tuple(row[column] for column in columns) for row in rows])
 
-
+# the * in the parameter means all the parameter after it has to be passed as name=value
+# Purpose: mostly for better organization
 def save_run(
     *, notes, result, mode, model, status, error_code, card_limit, duration_s,
     calls=(), stats=None, facts=(), notes_label=None,
@@ -312,6 +313,7 @@ def list_past_runs() -> list[dict]:
     with closing(conn):
         row = conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
     return [dict(r) for r in row]
+    
     
 def _cell(value):
     if not isinstance(value, str):
